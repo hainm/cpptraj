@@ -1,0 +1,6 @@
+convert lyx to markdown
+
+# http://www.lemmster.de/lyx-export-to-markdown.html
+
+lyx --export latex file.lyx
+pandoc --no-wrap -f latex -t markdown file.tex > file.md
