@@ -207,6 +207,7 @@ const char *ArgList::Command() const {
   * \return true if first argument matches key
   */
 bool ArgList::CommandIs(const char *key) const {
+  if (key == 0) return false;
   if (arglist_.empty()) return false;
   if (arglist_[0].compare( key )==0) return true;
   return false;
@@ -222,6 +223,12 @@ std::string const& ArgList::GetStringNext() {
   return emptystring;
 }
 
+/** \return true if argument at position is a potential mask. */
+bool ArgList::ArgIsMask(unsigned int pos) const {
+  size_t found = arglist_[pos].find_first_of(":@*");
+  return (found != std::string::npos);
+}
+
 // ArgList::GetMaskNext()
 /** Return next unmarked Mask. A mask MUST include one of the following: 
   *   ':' residue
@@ -232,8 +239,7 @@ std::string const& ArgList::GetStringNext() {
 std::string const& ArgList::GetMaskNext() {
   for (unsigned int arg = 0; arg < arglist_.size(); ++arg) {
     if (!marked_[arg]) {
-      size_t found = arglist_[arg].find_first_of(":@*");
-      if (found != std::string::npos) {
+      if (ArgIsMask( arg )) {
         marked_[arg] = true;
         return arglist_[arg];
       }
@@ -311,6 +317,26 @@ std::string const& ArgList::GetStringKey(const char *key) {
       }
     }
   return emptystring;
+}
+
+// ArgList::GetStringKey()
+/** Search the argument list for key, return the argument following key
+  * as a string if found, otherwise return default.
+  * \param key String to search for
+  * \param def Default string.
+  */
+std::string const& ArgList::GetStringKey(const char *key, std::string const& def) {
+  int nargs = (int)arglist_.size() - 1;
+  for (int arg=0; arg < nargs; arg++)
+    if (!marked_[arg]) {
+      if (arglist_[arg].compare(key)==0) {
+        marked_[arg]=true;
+        arg++;
+        marked_[arg]=true;
+        return arglist_[arg];
+      }
+    }
+  return def;
 }
 
 // ArgList::getKeyInt()

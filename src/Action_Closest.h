@@ -6,14 +6,27 @@
 class Action_Closest: public Action {
   public:
     Action_Closest();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_Closest(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_Closest(); }
+    void Help() const;
     ~Action_Closest();
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
     Action::RetType DoAction(int, ActionFrame&);
+#   ifdef MPI
+    int SyncAction();
+    Parallel::Comm trajComm_;
+#   endif
     void Print() {}
+#   ifdef CUDA
+    double* GPU_MEM_;       ///< Memory block to be sent to GPU.
+    double* V_atom_coords_; ///< Hold coordinates for selected solvent atoms.
+    double* U_atom_coords_; ///< Hold coordinates for selected solute atoms.
+    double* V_distances_;   ///< Hold closest distance for each solvent molecule.
+#   else
+    typedef std::vector<double> Darray;
+    Darray U_cell0_coords_; ///< Hold selected solute atoms, wrapped to cell0 if non-ortho.
+#   endif
 
     ImagedAction image_;    ///< Imaging routines.
     DataFile *outFile_;     ///< Output file for data on closest molecules

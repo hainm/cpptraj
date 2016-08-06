@@ -19,7 +19,7 @@ Analysis_RemLog::Analysis_RemLog() :
   repFracSlope_(0)
 {}
 
-void Analysis_RemLog::Help() {
+void Analysis_RemLog::Help() const {
   mprintf("\t{<remlog dataset> | <remlog filename>} [out <filename>] [crdidx | repidx]\n"
           "\t[stats [statsout <file>] [printtrips] [reptime <file>]] [lifetime <file>]\n"
           "\t[reptimeslope <n> reptimeslopeout <file>] [acceptout <file>] [name <setname>]\n"
@@ -29,9 +29,10 @@ void Analysis_RemLog::Help() {
 }
 
 // Analysis_RemLog::Setup()
-Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, DataSetList* datasetlist, DataFileList* DFLin, int debugIn)
+Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, AnalysisSetup& setup, int debugIn)
 {
   debug_ = debugIn;
+  Setup_ = setup;
   // Get remlog dataset
   std::string remlogName = analyzeArgs.GetStringNext();
   if (remlogName.empty()) {
@@ -39,7 +40,7 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, DataSetList* data
     return Analysis::ERR;
   }
   // Check if data set exists
-  remlog_ = (DataSet_RemLog*)datasetlist->FindSetOfType( remlogName, DataSet::REMLOG );
+  remlog_ = (DataSet_RemLog*)setup.DSL().FindSetOfType( remlogName, DataSet::REMLOG );
   if (remlog_ == 0) {
     mprinterr("Error: remlog data with name %s not found.\n", remlogName.c_str());
     return Analysis::ERR;
@@ -48,16 +49,16 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, DataSetList* data
     mprinterr("Error: remlog data set appears to be empty.\n");
     return Analysis::ERR;
   }
-  acceptout_ = DFLin->AddCpptrajFile( analyzeArgs.GetStringKey("acceptout"), "replica acceptance",
+  acceptout_ = setup.DFL().AddCpptrajFile( analyzeArgs.GetStringKey("acceptout"), "replica acceptance",
                                       DataFileList::TEXT, true );
   if (acceptout_ == 0) return Analysis::ERR;
-  lifetimes_ = DFLin->AddCpptrajFile( analyzeArgs.GetStringKey("lifetime"), "remlog lifetimes" );
+  lifetimes_ = setup.DFL().AddDataFile( analyzeArgs.GetStringKey("lifetime") );
   calculateLifetimes_ = (lifetimes_ != 0);
   calculateStats_ = analyzeArgs.hasKey("stats");
   if (calculateStats_) {
-    statsout_ = DFLin->AddCpptrajFile( analyzeArgs.GetStringKey("statsout"), "remlog stats",
+    statsout_ = setup.DFL().AddCpptrajFile( analyzeArgs.GetStringKey("statsout"), "remlog stats",
                                        DataFileList::TEXT, true );
-    reptime_ = DFLin->AddCpptrajFile( analyzeArgs.GetStringKey("reptime"), "replica times",
+    reptime_ = setup.DFL().AddCpptrajFile( analyzeArgs.GetStringKey("reptime"), "replica times",
                                       DataFileList::TEXT, true );
     if (statsout_ == 0 || reptime_ == 0) return Analysis::ERR;
   }
@@ -71,7 +72,7 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, DataSetList* data
     mprinterr("Error: Both reptimeslope and reptimeslopeout must be specified.\n");
     return Analysis::ERR;
   }
-  repFracSlope_ = DFLin->AddCpptrajFile( rfs_name, "replica fraction slope" );
+  repFracSlope_ = setup.DFL().AddCpptrajFile( rfs_name, "replica fraction slope" );
   printIndividualTrips_ = analyzeArgs.hasKey("printtrips");
   // Get mode
   if (analyzeArgs.hasKey("crdidx"))
@@ -80,7 +81,7 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, DataSetList* data
     mode_ = REPIDX;
   else
     mode_ = NONE;
-  const char* def_name = 0;
+  const char* def_name = "remlog";
   const char* yaxis = 0;
   if (mode_ == CRDIDX) {
     def_name = "repidx";
@@ -89,23 +90,24 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, DataSetList* data
     def_name = "crdidx";
     yaxis = "ylabel RepIdx";
   }
+  // Set up data set name
+  dsname_ = analyzeArgs.GetStringKey("name");
+  if ((mode_ != NONE || calculateLifetimes_) && dsname_.empty())
+    dsname_ = setup.DSL().GenerateDefaultName(def_name);
   // Set up an output set for each replica
   DataFile* dfout = 0;
   if (mode_ != NONE) {
     // Get output filename
     std::string outname = analyzeArgs.GetStringKey("out");
     if (!outname.empty()) {
-      dfout = DFLin->AddDataFile( outname, analyzeArgs );
+      dfout = setup.DFL().AddDataFile( outname, analyzeArgs );
       if (dfout == 0 ) return Analysis::ERR;
       if (yaxis != 0 ) dfout->ProcessArgs(yaxis);
     }
-    std::string dsname = analyzeArgs.GetStringKey("name");
-    if (dsname.empty())
-      dsname = datasetlist->GenerateDefaultName(def_name);
-    MetaData md(dsname);
+    MetaData md(dsname_);
     for (int i = 0; i < (int)remlog_->Size(); i++) {
       md.SetIdx(i+1);
-      DataSet_integer* ds = (DataSet_integer*)datasetlist->AddSet(DataSet::INTEGER, md);
+      DataSet_integer* ds = (DataSet_integer*)setup.DSL().AddSet(DataSet::INTEGER, md);
       if (ds == 0) return Analysis::ERR;
       outputDsets_.push_back( (DataSet*)ds );
       if (dfout != 0) dfout->AddDataSet( (DataSet*)ds );
@@ -175,7 +177,7 @@ Analysis::RetType Analysis_RemLog::Analyze() {
         dsLifetime.push_back( (DataSet_1D*)&(series[i][j]) );
       }
     }
-    if (Lifetime.ExternalSetup( dsLifetime, lifetimes_ ) == Analysis::ERR) {
+    if (Lifetime.ExternalSetup( dsLifetime, Setup_.DSL(), lifetimes_, dsname_ ) == Analysis::ERR) {
       mprinterr("Error: Could not set up remlog lifetime analysis.\n");
       return Analysis::ERR;
     }
@@ -252,7 +254,7 @@ Analysis::RetType Analysis_RemLog::Analyze() {
         for (int replica = 0; replica < (int)remlog_->Size(); replica++)
           mesh.SetY(replica, (double)replicaFrac[replica][crdidx] / (double)frame);
         double slope, intercept, correl;
-        mesh.LinearRegression(slope, intercept, correl, true);
+        mesh.LinearRegression(slope, intercept, correl, 0);
         repFracSlope_->Printf("  %14.7g %14.7g", slope * 100.0, correl);
                 //frame+1, crdidx, slope * 100.0, intercept * 100.0, correl
       }

@@ -12,16 +12,16 @@ Analysis_Spline::Analysis_Spline() :
   useDefaultMax_(false)
 {}
 
-void Analysis_Spline::Help() {
+void Analysis_Spline::Help() const {
   mprintf("\t<dset0> [<dset1> ...] [out <outfile>] [meshsize <n> | meshfactor <x>]\n"
           "\t[meshmin <mmin>] [meshmax <mmax>]\n"
           "  Cubic spline the given data sets.\n");
 }
 
-Analysis::RetType Analysis_Spline::Setup(ArgList& analyzeArgs, DataSetList* datasetlist, DataFileList* DFLin, int debugIn)
+Analysis::RetType Analysis_Spline::Setup(ArgList& analyzeArgs, AnalysisSetup& setup, int debugIn)
 {
   std::string setname = analyzeArgs.GetStringKey("name");
-  outfile_ = DFLin->AddDataFile(analyzeArgs.GetStringKey("out"), analyzeArgs);
+  outfile_ = setup.DFL().AddDataFile(analyzeArgs.GetStringKey("out"), analyzeArgs);
   meshsize_ = analyzeArgs.getKeyInt("meshsize", 0);
   meshfactor_ = -1.0;
   if (meshsize_ < 3) {
@@ -47,7 +47,7 @@ Analysis::RetType Analysis_Spline::Setup(ArgList& analyzeArgs, DataSetList* data
     return Analysis::ERR;
   }
   // Select datasets from remaining args
-  if (input_dsets_.AddSetsFromArgs( analyzeArgs.RemainingArgs(), *datasetlist )) {
+  if (input_dsets_.AddSetsFromArgs( analyzeArgs.RemainingArgs(), setup.DSL() )) {
     mprinterr("Error: Could not add data sets.\n");
     return Analysis::ERR;
   }
@@ -57,12 +57,11 @@ Analysis::RetType Analysis_Spline::Setup(ArgList& analyzeArgs, DataSetList* data
   }
 
   // Set up output datasets
-  Dimension Xdim( meshmin_, (meshmax_ - meshmin_) / (double)meshsize_,
-                  meshsize_ );
+  Dimension Xdim( meshmin_, (meshmax_ - meshmin_) / (double)meshsize_ );
   for (Array1D::const_iterator dsIn = input_dsets_.begin();
                                dsIn != input_dsets_.end(); ++dsIn)
   {
-    DataSet* ds = datasetlist->AddSet(DataSet::XYMESH, setname, "Spline");
+    DataSet* ds = setup.DSL().AddSet(DataSet::XYMESH, setname, "Spline");
     if (ds == 0) return Analysis::ERR;
     ds->SetLegend( "Spline(" + (*dsIn)->Meta().Legend() + ")" );
     // TODO: Set individually based on input_dsets_
@@ -70,9 +69,6 @@ Analysis::RetType Analysis_Spline::Setup(ArgList& analyzeArgs, DataSetList* data
     if (outfile_ != 0) outfile_->AddDataSet( ds );
     output_dsets_.push_back( (DataSet_Mesh*)ds );
   }
-  /*outfile_->Dim(Dimension::X).SetMin( meshmin_ );
-  double meshstep = (meshmax_ - meshmin_) / (double)meshsize_;
-  outfile_->Dim(Dimension::X).SetStep( meshstep );*/
 
   mprintf("    SPLINE: Applying cubic splining to %u data sets\n", input_dsets_.size());
   if (meshfactor_ < 0)
@@ -106,26 +102,21 @@ Analysis::RetType Analysis_Spline::Analyze() {
     if (useDefaultMin_)
       mmin = meshmin_;
     else
-      mmin = ds.Dim(0).Min();
+      mmin = ds.Min();
     if (useDefaultMax_)
       mmax = meshmax_;
     else
-      mmax = ds.Dim(0).Max();
+      mmax = ds.Max();
     if (meshfactor_ > 0)
       msize = (int)((double)ds.Size() * meshfactor_);
     else
       msize = meshsize_;
-    // Set up output dimension
+    // Set up output mesh X values - use same X label as input set.
     mprintf("\t%s: Setting mesh from %f->%f, size=%i,", ds.legend(), mmin, mmax, msize);
-    output_dsets_[idx]->SetDim( Dimension::X,
-        Dimension(mmin, (mmax - mmin)/(double)msize, msize, ds.Dim(0).Label()) );
     output_dsets_[idx]->CalculateMeshX(msize, mmin, mmax);
-    mprintf(" set min=%f, set step=%f\n", ds.Dim(0).Min(), ds.Dim(0).Step());
-    if (!ds.Dim(0).MinIsSet())
-      mprinterr("Internal Error: %s min is not set!\n", ds.legend());
-    if (ds.Dim(0).Step() < 0.0)
-      mprinterr("Internal Error: %s step is not set!\n", ds.legend());
-    // Calculate mesh Y values.
+    mprintf(" step=%f\n", output_dsets_[idx]->Dim(0).Step());
+    output_dsets_[idx]->ModifyDim(Dimension::X).SetLabel( ds.Dim(0).Label() );
+    // Calculate output mesh Y values from input set.
     output_dsets_[idx]->SetSplinedMesh( ds );
     // DEBUG
     //for (unsigned int i = 0; i < output_dsets_[idx]->Size(); i++)

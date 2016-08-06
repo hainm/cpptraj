@@ -5,16 +5,16 @@
 class Analysis_VectorMath : public Analysis {
   public:
     Analysis_VectorMath();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Analysis_VectorMath(); }
-    static void Help();
-    Analysis::RetType Setup(ArgList&,DataSetList*,DataFileList*,int);
+    DispatchObject* Alloc() const { return (DispatchObject*)new Analysis_VectorMath(); }
+    void Help() const;
+    Analysis::RetType Setup(ArgList&, AnalysisSetup&, int);
     Analysis::RetType Analyze();
   private:
     enum ModeType {  DOTPRODUCT = 0, DOTANGLE, CROSSPRODUCT };
     static const char* ModeString[];
 
-    int DotProduct();
-    int CrossProduct();
+    int DotProduct(unsigned int, unsigned int, unsigned int);
+    int CrossProduct(unsigned int, unsigned int, unsigned int);
 
     ModeType mode_;
     DataSet_Vector* vinfo1_;

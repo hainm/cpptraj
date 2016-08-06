@@ -6,9 +6,9 @@
 class Analysis_RemLog : public Analysis {
   public:
     Analysis_RemLog();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Analysis_RemLog(); }
-    static void Help();
-    Analysis::RetType Setup(ArgList&,DataSetList*,DataFileList*,int);
+    DispatchObject* Alloc() const { return (DispatchObject*)new Analysis_RemLog(); }
+    void Help() const;
+    Analysis::RetType Setup(ArgList&, AnalysisSetup&, int);
     Analysis::RetType Analyze();
   private:
     enum ModeType { NONE = 0, CRDIDX, REPIDX };
@@ -45,11 +45,13 @@ class Analysis_RemLog : public Analysis {
     DataSet_RemLog* remlog_;
     ModeType mode_;
     std::vector<DataSet*> outputDsets_;
-    CpptrajFile* lifetimes_;
+    DataFile* lifetimes_;
     CpptrajFile* statsout_;
     CpptrajFile* reptime_;
     CpptrajFile* acceptout_;
     int calcRepFracSlope_;
     CpptrajFile* repFracSlope_;
+    std::string dsname_; ///< Output data set name
+    AnalysisSetup Setup_; ///< Hold DSL for lifetime data sets
 };
 #endif

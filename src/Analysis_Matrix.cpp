@@ -11,13 +11,12 @@ Analysis_Matrix::Analysis_Matrix() :
   nevec_(0),
   thermopt_(false),
   reduce_(false),
-  eigenvaluesOnly_(false),
   nmwizopt_(false),
   nmwizvecs_(0),
   nmwizfile_(0)
 {}
 
-void Analysis_Matrix::Help() {
+void Analysis_Matrix::Help() const {
   mprintf("\t<name> [out <filename>] [thermo [outthermo <filename>] [temp <T>]]\n"
           "\t[vecs <#>] [name <modesname>] [reduce]\n"
           "\t[ nmwiz [nmwizvecs <n>] [nmwizfile <file>] %s\n"
@@ -27,7 +26,7 @@ void Analysis_Matrix::Help() {
 }
 
 // Analysis_Matrix::Setup()
-Analysis::RetType Analysis_Matrix::Setup(ArgList& analyzeArgs, DataSetList* DSLin, DataFileList* DFLin, int debugIn)
+Analysis::RetType Analysis_Matrix::Setup(ArgList& analyzeArgs, AnalysisSetup& setup, int debugIn)
 {
 #ifdef NO_MATHLIB
   mprinterr("Error: Compiled without LAPACK routines.\n");
@@ -40,9 +39,9 @@ Analysis::RetType Analysis_Matrix::Setup(ArgList& analyzeArgs, DataSetList* DSLi
     return Analysis::ERR;
   }
   // Find matrix in DataSetList.
-  matrix_ = (DataSet_2D*)DSLin->FindSetOfType( mname, DataSet::MATRIX_DBL );
+  matrix_ = (DataSet_2D*)setup.DSL().FindSetOfType( mname, DataSet::MATRIX_DBL );
   if (matrix_ == 0)
-    matrix_ = (DataSet_2D*)DSLin->FindSetOfType( mname, DataSet::MATRIX_FLT );
+    matrix_ = (DataSet_2D*)setup.DSL().FindSetOfType( mname, DataSet::MATRIX_FLT );
   if (matrix_ == 0) {
     mprinterr("Error: Could not find matrix named %s\n",mname.c_str());
     return Analysis::ERR;
@@ -61,9 +60,9 @@ Analysis::RetType Analysis_Matrix::Setup(ArgList& analyzeArgs, DataSetList* DSLi
       mprinterr("Error: nmwizvecs must be >= 1\n");
       return Analysis::ERR;
     }
-    nmwizfile_ = DFLin->AddCpptrajFile(analyzeArgs.GetStringKey("nmwizfile"), "NMwiz output",
+    nmwizfile_ = setup.DFL().AddCpptrajFile(analyzeArgs.GetStringKey("nmwizfile"), "NMwiz output",
                                        DataFileList::TEXT, true);
-    Topology* parmIn = DSLin->GetTopology( analyzeArgs); // TODO: Include with matrix
+    Topology* parmIn = setup.DSL().GetTopology( analyzeArgs); // TODO: Include with matrix
     if (parmIn == 0) {
       mprinterr("Error: nmwiz: No topology specified.\n");
       return Analysis::ERR;
@@ -79,11 +78,11 @@ Analysis::RetType Analysis_Matrix::Setup(ArgList& analyzeArgs, DataSetList* DSLi
   }
   
   // Filenames
-  DataFile* outfile = DFLin->AddDataFile( analyzeArgs.GetStringKey("out"), analyzeArgs);
+  DataFile* outfile = setup.DFL().AddDataFile( analyzeArgs.GetStringKey("out"), analyzeArgs);
   // Thermo flag
   thermopt_ = analyzeArgs.hasKey("thermo");
   if (thermopt_) {
-    outthermo_ = DFLin->AddCpptrajFile(analyzeArgs.GetStringKey("outthermo"), "'thermo' output",
+    outthermo_ = setup.DFL().AddCpptrajFile(analyzeArgs.GetStringKey("outthermo"), "'thermo' output",
                                        DataFileList::TEXT, true);
     if (outthermo_ == 0) return Analysis::ERR;
   }
@@ -104,7 +103,7 @@ Analysis::RetType Analysis_Matrix::Setup(ArgList& analyzeArgs, DataSetList* DSLi
   // Set up DataSet_Modes. Set Modes DataSet type to be same as input matrix. 
   MetaData md( analyzeArgs.GetStringKey("name") );
   md.SetScalarType( matrix_->Meta().ScalarType() );
-  modes_ = (DataSet_Modes*)DSLin->AddSet( DataSet::MODES, md, "Modes" );
+  modes_ = (DataSet_Modes*)setup.DSL().AddSet( DataSet::MODES, md, "Modes" );
   if (modes_==0) return Analysis::ERR;
   if (outfile != 0) outfile->AddDataSet( modes_ );
 
@@ -132,7 +131,8 @@ Analysis::RetType Analysis_Matrix::Setup(ArgList& analyzeArgs, DataSetList* DSLi
 
 // Analysis_Matrix::Analyze()
 Analysis::RetType Analysis_Matrix::Analyze() {
-  modes_->SetAvgCoords( *matrix_ );
+  // Set the averaged coordinates and masses from matrix.
+  if (modes_->SetAvgCoords( *matrix_ )) return Analysis::ERR;
   mprintf("\tEigenmode calculation for '%s'\n", matrix_->legend());
   // Check that the matrix was generated with enough snapshots.
   if (matrix_->Type() == DataSet::MATRIX_DBL) {
@@ -144,17 +144,13 @@ Analysis::RetType Analysis_Matrix::Analyze() {
   }
   // Calculate eigenvalues / eigenvectors
   if (modes_->CalcEigen( *matrix_, nevec_ )) return Analysis::ERR;
+  // If mass-weighted covariance, mass-weight the resulting eigenvectors.
   if (matrix_->Meta().ScalarType() == MetaData::MWCOVAR) {
-    DataSet_MatrixDbl const& Dmatrix = static_cast<DataSet_MatrixDbl const&>( *matrix_ );
-    if ( Dmatrix.Mass().empty() ) {
-      mprinterr("Error: MWCOVAR Matrix %s does not have mass info.\n", matrix_->legend());
-      return Analysis::ERR;
-    }
-    mprintf("Info: Converting eigenvalues t cm^-1 and mass-weighting eigenvectors.\n");
+    mprintf("Info: Converting eigenvalues to cm^-1 and mass-weighting eigenvectors.\n");
     // Convert eigenvalues to cm^-1
     if (modes_->EigvalToFreq(thermo_temp_)) return Analysis::ERR;
-    // Mass-wt eigenvectors // TODO Do not pass in Mass again, done above in SetAvgCoords
-    if (modes_->MassWtEigvect( Dmatrix.Mass() )) return Analysis::ERR;
+    // Mass-wt eigenvectors
+    if (modes_->MassWtEigvect()) return Analysis::ERR;
     // Calc thermo-chemistry if specified
     if (thermopt_)
       modes_->Thermo( *outthermo_, 1, thermo_temp_, 1.0 );

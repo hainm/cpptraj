@@ -4,9 +4,10 @@
 #include "CpptrajStdio.h"
 #include "DataSet_1D.h"
 
-Analysis_Overlap::Analysis_Overlap() : ds1_(0), ds2_(0), useDeviation_(false) {}
+Analysis_Overlap::Analysis_Overlap() : Analysis(HIDDEN),
+  ds1_(0), ds2_(0), useDeviation_(false) {}
 
-void Analysis_Overlap::Help() {
+void Analysis_Overlap::Help() const {
   mprintf("\tds1 <ds1> ds2 <ds2> [rmsd]\n");
 }
 
@@ -24,12 +25,12 @@ static inline bool check_type(DataSet* ds, int n_ds) {
   return false;
 }
 
-Analysis::RetType Analysis_Overlap::Setup(ArgList& analyzeArgs, DataSetList* datasetlist, DataFileList* DFLin, int debugIn)
+Analysis::RetType Analysis_Overlap::Setup(ArgList& analyzeArgs, AnalysisSetup& setup, int debugIn)
 {
   // Keywords
-  ds1_ = datasetlist->GetDataSet( analyzeArgs.GetStringKey("ds1") );
+  ds1_ = setup.DSL().GetDataSet( analyzeArgs.GetStringKey("ds1") );
   if (check_type(ds1_,1)) return Analysis::ERR;
-  ds2_ = datasetlist->GetDataSet( analyzeArgs.GetStringKey("ds2") );
+  ds2_ = setup.DSL().GetDataSet( analyzeArgs.GetStringKey("ds2") );
   if (check_type(ds2_,2)) return Analysis::ERR;
   useDeviation_ = analyzeArgs.hasKey("rmsd");
 

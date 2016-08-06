@@ -19,6 +19,8 @@ Box::Box(const double* bIn) //: debug_(0)
   SetBox( bIn );
 }
 
+Box::Box(const float* bIn) { SetBox( bIn ); }
+
 Box::Box(Matrix_3x3 const& ucell) { SetBox( ucell ); }
 
 // COPY CONSTRUCTOR
@@ -46,16 +48,24 @@ Box &Box::operator=(const Box& rhs) {
   return *this;
 }
 
-const double Box::TRUNCOCTBETA = 2.0*acos(1.0/sqrt(3.0))*Constants::RADDEG; 
+const double Box::TRUNCOCTBETA_ = 2.0*acos(1.0/sqrt(3.0))*Constants::RADDEG;
 
-const char* Box::BoxNames[] = {
+/** This value is chosen so that TRUNCOCTBETA_ - TruncOctDelta_ is just
+  * less than 109.47, about 109.4699, since 109.47 is probably the lowest
+  * precision angle we can accept. +0.000000703 to avoid FP round-down.
+  */
+const double Box::TruncOctDelta_ = 0.001220703;
+
+const double Box::TruncOctMin_ = Box::TRUNCOCTBETA_ - Box::TruncOctDelta_;
+
+const double Box::TruncOctMax_ = Box::TRUNCOCTBETA_ + Box::TruncOctDelta_;
+
+/** Used to detect low precision trunc. oct. angles (e.g. 109.47). */
+const double Box::TruncOctEps_ = 0.001;
+
+const char* Box::BoxNames_[] = {
   "None", "Orthogonal", "Trunc. Oct.", "Rhombic Dodec.", "Non-orthogonal"
 };
-
-// Box::TypeName()
-const char* Box::TypeName() const {
-  return BoxNames[btype_];
-}
 
 // Box::SetBetaLengths()
 void Box::SetBetaLengths(double beta, double xin, double yin, double zin) {
@@ -83,6 +93,21 @@ void Box::SetBox(const double* xyzabg) {
   SetBoxType();
 }
 
+/** Set box from float[6] array */
+void Box::SetBox(const float* xyzabg) {
+  if (xyzabg == 0) {
+    mprinterr("Error: Box input array is null\n");
+    return;
+  }
+  box_[0] = (double)xyzabg[0];
+  box_[1] = (double)xyzabg[1];
+  box_[2] = (double)xyzabg[2];
+  box_[3] = (double)xyzabg[3];
+  box_[4] = (double)xyzabg[4];
+  box_[5] = (double)xyzabg[5];
+  SetBoxType();
+}
+
 /** Set box from unit cell matrix. */
 void Box::SetBox(Matrix_3x3 const& ucell) {
   Vec3 x_axis = ucell.Row1();
@@ -98,15 +123,15 @@ void Box::SetBox(Matrix_3x3 const& ucell) {
 }
 
 // Box::SetTruncOct()
-/** Set as truncated octahedron with no lengths. */
+/** Set as truncated octahedron with all lengths set to whatever X is. */
 void Box::SetTruncOct() {
-  box_[0] = 0;
-  box_[1] = 0;
-  box_[2] = 0;
-  box_[3] = TRUNCOCTBETA;
-  box_[4] = TRUNCOCTBETA;
-  box_[5] = TRUNCOCTBETA;
+  box_[1] = box_[0];
+  box_[2] = box_[0];
+  box_[3] = TRUNCOCTBETA_;
+  box_[4] = TRUNCOCTBETA_;
+  box_[5] = TRUNCOCTBETA_;
   btype_ = TRUNCOCT;
+  mprintf("Info: Setting box to be perfect truncated octahedron (a=b=g=%g)\n", box_[3]);
 }
 
 // Box::SetNoBox()
@@ -132,28 +157,36 @@ void Box::SetMissingInfo(const Box& rhs) {
   SetBoxType();
 }
 
-static inline bool IsTruncOct(double angle) {
-  if (angle > 109.47 && angle < 109.48) return true;
-  return false;
+bool Box::IsTruncOct(double angle) {
+  return (angle > TruncOctMin_ && angle < TruncOctMax_);
+}
+
+bool Box::BadTruncOctAngle(double angle) {
+  return (fabs( TRUNCOCTBETA_ - angle ) > TruncOctEps_);
 }
 
 // Box::SetBoxType()
 /** Determine box type (none/ortho/nonortho) based on box angles. */
 void Box::SetBoxType() {
   btype_ = NONORTHO;
-  // No lengths, no box
-  if (box_[0] < Constants::SMALL && box_[1] < Constants::SMALL && box_[2] < Constants::SMALL) {
+  bool noLengths = (box_[0] < Constants::SMALL &&
+                    box_[1] < Constants::SMALL &&
+                    box_[2] < Constants::SMALL);
+  bool noAngles = ( box_[3] <= 0 && box_[4] <= 0 && box_[5] <= 0);
+  if ( noLengths ) {
+    // No lengths, no box
     btype_ = NOBOX;
-    mprintf("Warning: Box length(s) <= 0.0; setting box to NONE.\n");
-  // No angles, no box
-  } else if ( box_[3] <= 0 && box_[4] <= 0 && box_[5] <= 0) {
+    if (!noAngles)
+      mprintf("Warning: Box length(s) <= 0.0; setting box to NONE.\n");
+  } else if ( noAngles ) {
+    // No angles, no box
     mprintf("Warning: Box angle(s) <= 0.0; setting box to NONE.\n");
     btype_ = NOBOX;
-  // All 90, orthogonal 
   } else if (box_[3] == 90.0 && box_[4] == 90.0 && box_[5] == 90.0)
+    // All 90, orthogonal
     btype_ = ORTHO;
-  // All 109.47, truncated octahedron
   else if ( IsTruncOct( box_[3] ) && IsTruncOct( box_[4] ) && IsTruncOct( box_[5] ) )
+    // All 109.47, truncated octahedron
     btype_ = TRUNCOCT;
   else if (box_[3] == 0 && box_[4] != 0 && box_[5] == 0) {
     // Only beta angle is set (e.g. from Amber topology).
@@ -164,7 +197,6 @@ void Box::SetBoxType() {
       //if (debug_>0) mprintf("\tSetting box to be orthogonal\n");
     } else if ( IsTruncOct( box_[4] ) ) {
       btype_ = TRUNCOCT;
-      //Box[3] = TRUNCOCTBETA;
       box_[3] = box_[4];
       box_[5] = box_[4];
       //if (debug_>0) mprintf("\tSetting box to be a truncated octahedron, angle is %lf\n",box_[3]);
@@ -179,8 +211,30 @@ void Box::SetBoxType() {
       box_[3] = box_[4];
       box_[5] = box_[4];
     }
-  } 
+  }
   //if (debug_>0) mprintf("\tBox type is %s (beta=%lf)\n",TypeName(), box_[4]);
+  // Check for low-precision truncated octahedron angles.
+  if (btype_ == TRUNCOCT) {
+    if ( BadTruncOctAngle(box_[3]) || BadTruncOctAngle(box_[4]) || BadTruncOctAngle(box_[5]) )
+      mprintf("Warning: Low precision truncated octahedron angles detected (%g vs %g).\n"
+              "Warning:   If desired, the 'box' command can be used during processing\n"
+              "Warning:   to set higher-precision angles.\n", box_[4], TRUNCOCTBETA_);
+  } else if (btype_ == NONORTHO) {
+    // Check for skewed box.
+    const double boxFactor = 0.5005;
+    double Xaxis_X = box_[0];
+    double Yaxis_X = box_[1]*cos(Constants::DEGRAD*box_[5]);
+    double Yaxis_Y = box_[1]*sin(Constants::DEGRAD*box_[5]);
+    double Zaxis_X = box_[2]*cos(Constants::DEGRAD*box_[4]);
+    double Zaxis_Y = (box_[1]*box_[2]*cos(Constants::DEGRAD*box_[3]) - Zaxis_X*Yaxis_X) / Yaxis_Y;
+    if ( fabs(Yaxis_X) > boxFactor * Xaxis_X ||
+         fabs(Zaxis_X) > boxFactor * Xaxis_X ||
+         fabs(Zaxis_Y) > boxFactor * Yaxis_Y )
+    {
+      mprintf("Warning: Non-orthogonal box is too skewed to perform accurate imaging.\n"
+              "Warning:  Images and imaged distances may not be the absolute minimum.\n");
+    }
+  }
 }
 
 // Box::ToRecip()
@@ -233,3 +287,73 @@ double Box::ToRecip(Matrix_3x3& ucell, Matrix_3x3& recip) const {
 
   return volume;
 }
+
+// Box::UnitCell()
+Matrix_3x3 Box::UnitCell(double scale) const {
+  Matrix_3x3 ucell;
+  double by, bz;
+  switch (btype_) {
+    case NOBOX: ucell.Zero(); break;
+    case ORTHO:
+      ucell[0] = box_[0] * scale;
+      ucell[1] = 0.0;
+      ucell[2] = 0.0;
+      ucell[3] = 0.0;
+      ucell[4] = box_[1] * scale;
+      ucell[5] = 0.0;
+      ucell[6] = 0.0;
+      ucell[7] = 0.0;
+      ucell[8] = box_[2] * scale;
+      break;
+    case TRUNCOCT:
+    case RHOMBIC:
+    case NONORTHO:
+      by = box_[1] * scale;
+      bz = box_[2] * scale;
+      ucell[0] = box_[0] * scale;
+      ucell[1] = 0.0;
+      ucell[2] = 0.0;
+      ucell[3] = by*cos(Constants::DEGRAD*box_[5]);
+      ucell[4] = by*sin(Constants::DEGRAD*box_[5]);
+      ucell[5] = 0.0;
+      ucell[6] = bz*cos(Constants::DEGRAD*box_[4]);
+      ucell[7] = (by*bz*cos(Constants::DEGRAD*box_[3]) - ucell[6]*ucell[3]) / ucell[4];
+      ucell[8] = sqrt(bz*bz - ucell[6]*ucell[6] - ucell[7]*ucell[7]);
+      break;
+  }
+  return ucell;
+}
+
+void Box::PrintInfo() const {
+  mprintf("\tBox: '%s' XYZ= { %8.3f %8.3f %8.3f } ABG= { %6.2f %6.2f %6.2f }\n",
+          BoxNames_[btype_], box_[0], box_[1], box_[2], box_[3], box_[4], box_[5]);
+}
+
+static inline void dswap(double& d1, double& d2) {
+  double dtemp = d1;
+  d1 = d2;
+  d2 = dtemp;
+}
+
+static inline void bswap(Box::BoxType& b1, Box::BoxType& b2) {
+  Box::BoxType btemp = b1;
+  b1 = b2;
+  b2 = btemp;
+}
+
+void Box::swap(Box& rhs) {
+  bswap( btype_,  rhs.btype_ );
+  dswap( box_[0], rhs.box_[0] );
+  dswap( box_[1], rhs.box_[1] );
+  dswap( box_[2], rhs.box_[2] );
+  dswap( box_[3], rhs.box_[3] );
+  dswap( box_[4], rhs.box_[4] );
+  dswap( box_[5], rhs.box_[5] );
+}
+#ifdef MPI
+int Box::SyncBox(Parallel::Comm const& commIn) {
+  commIn.MasterBcast( &btype_, 1, MPI_INT );
+  commIn.MasterBcast( box_,    6, MPI_DOUBLE );
+  return 0;
+}
+#endif

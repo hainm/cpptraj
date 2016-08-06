@@ -2,6 +2,7 @@
 
 test.general:
 	@-cd Test_General && ./RunTest.sh $(OPT)
+	@-cd Test_Parallel && ./RunTest.sh $(OPT)
 
 test.strip:
 	@-cd Test_Strip && ./RunTest.sh $(OPT)
@@ -9,7 +10,7 @@ test.strip:
 test.brokentraj:
 	@-cd Test_BrokenTraj && ./RunTest.sh $(OPT)
 
-test.traj:
+test.trajinoffset:
 	@-cd Test_TrajinOffset && ./RunTest.sh $(OPT)
 
 test.remdnetcdf:
@@ -32,9 +33,6 @@ test.hbond:
 
 test.image:
 	@-cd Test_Image && ./RunTest.sh $(OPT)
-
-test.comprehensive:
-	@-cd Test_Comprehensive && ./RunTest.sh $(OPT)
 
 test.netcdftraj:
 	@-cd Test_NetcdfTraj && ./RunTest.sh $(OPT)
@@ -60,8 +58,8 @@ test.outtraj:
 test.datafile:
 	@-cd Test_Datafile && ./RunTest.sh $(OPT)
 
-#test.avgref:
-#	@cd Test_AvgRef && ./RunTest.sh $(OPT)
+test.avgref:
+	@-cd Test_AvgRef && ./RunTest.sh $(OPT)
 
 test.mol2:
 	@-cd Test_Mol2 && ./RunTest.sh $(OPT)
@@ -98,6 +96,13 @@ test.jcoupling:
 
 test.cluster:
 	@-cd Test_Cluster && ./RunTest.sh $(OPT)
+	@-cd Test_Cluster_Sieve && ./RunTest.sh $(OPT)
+	@-cd Test_Cluster_RandomSieve && ./RunTest.sh $(OPT)
+	@-cd Test_Cluster_DataSet && ./RunTest.sh $(OPT)
+	@-cd Test_Cluster_DBSCAN && ./RunTest.sh $(OPT)
+	@-cd Test_Cluster_Kmeans && ./RunTest.sh $(OPT)
+	@-cd Test_Cluster_SymmRMSD && ./RunTest.sh $(OPT)
+	@-cd Test_Cluster_TrajWrites && ./RunTest.sh $(OPT)
 
 test.ired:
 	@-cd Test_IRED && ./RunTest.sh $(OPT)
@@ -112,91 +117,216 @@ test.rotdif:
 	@-cd Test_Rotdif && ./RunTest.sh $(OPT)
 
 test.corr:
-	@cd Test_Corr && ./RunTest.sh $(OPT)
+	@-cd Test_Corr && ./RunTest.sh $(OPT)
 
 test.checkstructure:
-	@cd Test_CheckStructure && ./RunTest.sh $(OPT)
+	@-cd Test_CheckStructure && ./RunTest.sh $(OPT)
 
 test.runavg:
-	@cd Test_Runavg && ./RunTest.sh $(OPT)
+	@-cd Test_Runavg && ./RunTest.sh $(OPT)
 
 test.analrunavg:
-	@cd Test_AnalysisRunAvg && ./RunTest.sh $(OPT)
+	@-cd Test_AnalysisRunAvg && ./RunTest.sh $(OPT)
 
 test.rmsavgcorr:
-	@cd Test_RmsAvgCorr && ./RunTest.sh $(OPT)
+	@-cd Test_RmsAvgCorr && ./RunTest.sh $(OPT)
 
 test.contacts:
-	@cd Test_Contacts && ./RunTest.sh $(OPT)
+	@-cd Test_Contacts && ./RunTest.sh $(OPT)
 
 test.principal:
-	@cd Test_Principal && ./RunTest.sh $(OPT)
+	@-cd Test_Principal && ./RunTest.sh $(OPT)
 
 test.clusterdihedral:
-	@cd Test_ClusterDihedral && ./RunTest.sh $(OPT)
+	@-cd Test_ClusterDihedral && ./RunTest.sh $(OPT)
 
 test.vector:
-	@cd Test_Vector && ./RunTest.sh $(OPT)
+	@-cd Test_Vector && ./RunTest.sh $(OPT)
 
 test.matrix:
-	@cd Test_Matrix && ./RunTest.sh $(OPT)
+	@-cd Test_Matrix && ./RunTest.sh $(OPT)
 
 test.atomicfluct:
-	@cd Test_AtomicFluct && ./RunTest.sh $(OPT)
+	@-cd Test_AtomicFluct && ./RunTest.sh $(OPT)
 
 test.grid:
-	@cd Test_Grid && ./RunTest.sh $(OPT)
+	@-cd Test_Grid && ./RunTest.sh $(OPT)
 
 test.unwrap:
-	@cd Test_Unwrap && ./RunTest.sh $(OPT)
+	@-cd Test_Unwrap && ./RunTest.sh $(OPT)
 
 test.project:
-	@cd Test_Project && ./RunTest.sh $(OPT)
+	@-cd Test_Project && ./RunTest.sh $(OPT)
 
 test.analyzemodes:
-	@cd Test_Analyze_Modes && ./RunTest.sh $(OPT)
+	@-cd Test_Analyze_Modes && ./RunTest.sh $(OPT)
 
 test.watershell:
-	@cd Test_Watershell && ./RunTest.sh $(OPT)
+	@-cd Test_Watershell && ./RunTest.sh $(OPT)
 
 test.diffusion:
-	@cd Test_Diffusion && ./RunTest.sh $(OPT)
+	@-cd Test_Diffusion && ./RunTest.sh $(OPT)
 
 test.volmap:
-	@cd Test_Volmap && ./RunTest.sh $(OPT)
+	@-cd Test_Volmap && ./RunTest.sh $(OPT)
 
 test.lie:
-	@cd Test_LIE && ./RunTest.sh $(OPT)
+	@-cd Test_LIE && ./RunTest.sh $(OPT)
 
 test.spam:
-	@cd Test_SPAM && ./RunTest.sh $(OPT)
+	@-cd Test_SPAM && ./RunTest.sh $(OPT)
 
 test.randomizeions:
-	@cd Test_RandomizeIons && ./RunTest.sh $(OPT)
+	@-cd Test_RandomizeIons && ./RunTest.sh $(OPT)
 
 test.density:
-	@cd Test_Density && ./RunTest.sh $(OPT)
+	@-cd Test_Density && ./RunTest.sh $(OPT)
 
 test.lipidorder:
-	@cd Test_LipidOrder && ./RunTest.sh $(OPT)
+	@-cd Test_LipidOrder && ./RunTest.sh $(OPT)
 
 test.pairdist:
-	@cd Test_PairDist && ./RunTest.sh $(OPT)
+	@-cd Test_PairDist && ./RunTest.sh $(OPT)
 
 test.gist:
-	@cd Test_GIST && ./RunTest.sh $(OPT)
+	@-cd Test_GIST && ./RunTest.sh $(OPT)
+	@-cd Test_GIST_Order && ./RunTest.sh $(OPT)
 
 test.readdata:
-	@cd Test_ReadData && ./RunTest.sh $(OPT)
+	@-cd Test_ReadData && ./RunTest.sh $(OPT)
 
 test.ambpdb:
-	@cd Test_AmbPDB && ./RunTest.sh $(OPT)
+	@-cd Test_AmbPDB && ./RunTest.sh $(OPT)
 
-# Only crucial/non-time-consuming tests should go here.
-MAINTESTS=test.general \
+test.systemVF:
+	@-cd Test_systemVF && ./RunTest.sh $(OPT)
+
+test.atomiccorr:
+	@-cd Test_AtomicCorr && ./RunTest.sh $(OPT)
+
+test.autocorr:
+	@-cd Test_AutoCorr && ./RunTest.sh $(OPT)
+
+test.box:
+	@-cd Test_Box && ./RunTest.sh $(OPT)
+
+test.atomtypeselect:
+	@-cd Test_AtomTypeSelect && ./RunTest.sh $(OPT)
+
+test.crankstat:
+	@-cd Test_Crank_Stat && ./RunTest.sh $(OPT)
+
+test.createcrd:
+	@-cd Test_CreateCrd && ./RunTest.sh $(OPT)
+
+test.autoimage:
+	@-cd Test_AutoImage && ./RunTest.sh $(OPT)
+
+test.loadcrd:
+	@-cd Test_LoadCrd && ./RunTest.sh $(OPT)
+
+test.multivector:
+	@-cd Test_MultiVector && ./RunTest.sh $(OPT)
+
+test.lifetime:
+	@-cd Test_Lifetime && ./RunTest.sh $(OPT)
+
+test.fft:
+	@-cd Test_FFT && ./RunTest.sh $(OPT)
+
+test.timecorr:
+	@-cd Test_Timecorr && ./RunTest.sh $(OPT)
+
+test.crosscorr:
+	@-cd Test_CrossCorr && ./RunTest.sh $(OPT)
+
+test.symmrmsd:
+	@-cd Test_SymmRmsd && ./RunTest.sh $(OPT)
+
+test.multidihedral:
+	@-cd Test_Multidihedral && ./RunTest.sh $(OPT)
+
+test.mremd:
+	@-cd Test_Ensemble_MREMD && ./RunTest.sh $(OPT)
+
+test.makestructure:
+	@-cd Test_MakeStructure && ./RunTest.sh $(OPT)
+
+test.rotate:
+	@-cd Test_Rotate && ./RunTest.sh $(OPT)
+
+test.integrate:
+	@-cd Test_Integrate && ./RunTest.sh $(OPT)
+
+test.nativecontacts:
+	@-cd Test_NativeContacts && ./RunTest.sh $(OPT)
+
+test.checkchirality:
+	@-cd Test_CheckChiral && ./RunTest.sh $(OPT)
+
+test.energy:
+	@-cd Test_Energy && ./RunTest.sh $(OPT)
+
+test.lessplit:
+	@-cd Test_LESsplit && ./RunTest.sh $(OPT)
+
+test.permutedih:
+	@-cd Test_PermuteDihedrals && ./RunTest.sh $(OPT)
+
+test.ccp4:
+	@-cd Test_CCP4 && ./RunTest.sh $(OPT)
+
+test.dihcovar:
+	@-cd Test_DihCovar && ./RunTest.sh $(OPT)
+
+test.curvefit:
+	@-cd Test_CurveFit && ./RunTest.sh $(OPT)
+	@-cd Test_Multicurve && ./RunTest.sh $(OPT)
+
+test.datasetavg:
+	@-cd Test_DataSetAverage && ./RunTest.sh $(OPT)
+
+test.vectormath:
+	@-cd Test_VectorMath && ./RunTest.sh $(OPT)
+
+test.esander:
+	@-cd Test_Esander && ./RunTest.sh $(OPT)
+
+test.temperature:
+	@-cd Test_Temperature && ./RunTest.sh $(OPT)
+
+test.spline:
+	@-cd Test_Spline && ./RunTest.sh $(OPT)
+
+test.kde:
+	@-cd Test_KDE && ./RunTest.sh $(OPT)
+
+test.wavelet:
+	@-cd Test_Wavelet && ./RunTest.sh $(OPT)
+
+test.cif:
+	@-cd Test_CIF && ./RunTest.sh $(OPT)
+
+test.pdb:
+	@-cd Test_PDB && ./RunTest.sh $(OPT)
+
+test.align:
+	@-cd Test_Align && ./RunTest.sh $(OPT)
+
+test.velocityautocorr:
+	@-cd Test_VelocityAutoCorr && ./RunTest.sh $(OPT)
+
+test.velfrc:
+	@-cd Test_VelFrc && ./RunTest.sh $(OPT)
+
+test.rotatedihedral:
+	@-cd Test_RotateDihedral && ./RunTest.sh $(OPT)
+
+# Only non-time-consuming tests should go here.
+SHORT_TESTS=test.general \
           test.strip \
           test.brokentraj \
-          test.traj \
+          test.trajinoffset \
           test.remdnetcdf \
           test.framerange \
           test.perres \
@@ -234,12 +364,51 @@ MAINTESTS=test.general \
           test.lipidorder \
           test.pairdist \
           test.readdata \
-          test.ambpdb
+          test.ambpdb \
+          test.systemVF \
+          test.atomiccorr \
+          test.autocorr \
+          test.box \
+          test.atomtypeselect \
+          test.avgref \
+          test.crankstat \
+          test.createcrd \
+          test.autoimage \
+          test.loadcrd \
+          test.multivector \
+          test.lifetime \
+          test.fft \
+          test.timecorr \
+          test.crosscorr \
+          test.symmrmsd \
+          test.multidihedral \
+          test.makestructure \
+          test.rotate \
+          test.integrate \
+          test.nativecontacts \
+          test.checkchirality \
+          test.energy \
+          test.permutedih \
+          test.ccp4 \
+          test.curvefit \
+          test.datasetavg \
+          test.vectormath \
+          test.temperature \
+          test.spline \
+          test.kde \
+          test.wavelet \
+          test.cif \
+          test.pdb \
+          test.align \
+          test.velocityautocorr \
+          test.velfrc \
+          test.rotatedihedral
+
 # Every test should go here.
 COMPLETETESTS=test.general \
               test.strip \
               test.brokentraj \
-              test.traj \
+              test.trajinoffset \
               test.remdnetcdf \
               test.framerange \
               test.perres \
@@ -256,7 +425,6 @@ COMPLETETESTS=test.general \
               test.outtraj \
               test.charmm \
               test.rotdif \
-              test.comprehensive \
               test.netcdftraj \
               test.runavg \
               test.rmsd \
@@ -297,28 +465,82 @@ COMPLETETESTS=test.general \
               test.lipidorder \
               test.pairdist \
               test.gist \
-              test.ambpdb
+              test.ambpdb \
+              test.systemVF \
+              test.atomiccorr \
+              test.autocorr \
+              test.box \
+              test.atomtypeselect \
+              test.avgref \
+              test.crankstat \
+              test.createcrd \
+              test.autoimage \
+              test.loadcrd \
+              test.multivector \
+              test.lifetime \
+              test.fft \
+              test.timecorr \
+              test.crosscorr \
+              test.symmrmsd \
+              test.multidihedral \
+              test.mremd \
+              test.makestructure \
+              test.rotate \
+              test.integrate \
+              test.nativecontacts \
+              test.checkchirality \
+              test.energy \
+              test.lessplit \
+              test.permutedih \
+              test.ccp4 \
+              test.dihcovar \
+              test.curvefit \
+              test.datasetavg \
+              test.vectormath \
+              test.esander \
+              test.temperature \
+              test.spline \
+              test.kde \
+              test.wavelet \
+              test.cif \
+              test.pdb \
+              test.align \
+              test.velocityautocorr \
+              test.velfrc \
+              test.rotatedihedral
 
-summary: Summary.sh MasterTest.sh
-	@./Summary.sh $(OPT) summary
+test: test.all 
 
-test.standalone: 
-	$(MAKE) test.complete OPT=standalone
-	@./Summary.sh standalone 
+test.all:
+	$(MAKE) test.complete summary
 
-test.main: $(MAINTESTS)
+test.mpi:
+	$(MAKE) test.complete summary OPT="$(OPT) mpi"
 
-test: 
-	$(MAKE) test.main
+test.openmp:
+	$(MAKE) test.complete summary OPT="$(OPT) openmp"
 
-test.vg:
-	$(MAKE) test.main OPT=vg
+test.cuda:
+	$(MAKE) test.complete summary OPT="$(OPT) cuda"
 
-test.vg.standalone:
-	$(MAKE) test.complete OPT="standalone vg"
-	@./Summary.sh standalone vg
+test.libcpptraj:
+	@-cd Test_Libcpptraj && ./RunTest.sh $(OPT)
 
 test.complete: $(COMPLETETESTS)
+
+test.showerrors:
+	$(MAKE) test.complete summary OPT="$(OPT) showerrors"
+
+test.short:
+	$(MAKE) test.shorttests summary
+
+test.shorttests: $(SHORT_TESTS)
+
+summary: Summary.sh MasterTest.sh
+	@./Summary.sh summary $(OPT)
+
+test.vg:
+	$(MAKE) test.complete summary OPT="$(OPT) vg"
 
 clean:
 	@echo "Cleaning all test directories:"
@@ -329,7 +551,7 @@ clean:
             rm -f $$dif ;\
         done ;\
         )
-	$(MAKE) test.complete OPT=clean
+	$(MAKE) test.complete test.libcpptraj OPT=clean
 
 cleanprofile:
 	@echo "Removing GNU profile files:"

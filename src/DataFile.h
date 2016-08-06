@@ -12,7 +12,7 @@ class DataFile {
     /// Known data file formats.
     enum DataFormatType {
       DATAFILE=0, XMGRACE, GNUPLOT, XPLOR, OPENDX, REMLOG, MDOUT, EVECS,
-      VECTRAJ, XVG, UNKNOWN_DATA 
+      VECTRAJ, XVG, CCP4, CMATRIX, NCCMATRIX, UNKNOWN_DATA 
     };
     DataFile();
     ~DataFile();
@@ -43,8 +43,10 @@ class DataFile {
     int ReadDataOfType(FileName const&, DataFormatType, DataSetList&);
     /// Set up DataFile for writing.
     int SetupDatafile(FileName const&, ArgList&, int);
+    /// Set up DataFile for writing with specific format.
+    int SetupDatafile(FileName const&, ArgList&, DataFormatType, int);
     /// Set up DataFile for writing to STDOUT (DataIO_Std)
-    int SetupStdout(ArgList&, int);
+    int SetupStdout(ArgList const&, int);
     /// Add a previously set-up DataSet to DataFile.
     int AddDataSet(DataSet*);
     /// Remove a set from the DataFile.
@@ -67,7 +69,7 @@ class DataFile {
     /// \return DataFile member num.
     int Member()                   const { return member_;   }
     /// Set DataFile member num.
-    void SetMember(int);
+    void SetMember(int m) { member_ = m; }
   private:
     static DataIO* DetectFormat(FileName const&, DataFormatType&);
 
@@ -82,7 +84,14 @@ class DataFile {
     DataSetList SetList_;      ///< Array of pointers to associated DataSets.
     DataIO* dataio_;           ///< DataIO object for this DataFormatType.
     FileName filename_;        ///< DataFile file name.
+    struct DimStruct {
+      std::string label_;
+      double min_;
+      double step_;
+    };
     /// Hold defaults for X, Y, and Z DataSet dimensions.
-    std::vector<Dimension> defaultDim_;
+    std::vector<DimStruct> defaultDim_;
+    /// True if min for X/Y/Z dim has been set.
+    std::vector<bool> minIsSet_;
 };
 #endif

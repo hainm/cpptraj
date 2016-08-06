@@ -1,11 +1,23 @@
+#include "CpptrajStdio.h"
 #include <cstdio> // required for readline
 #include <cstdlib> // free
 #include <cstring>
-#define READLINE_LIBRARY
-#include <readline.h>
-#include <history.h>
+#if defined (NO_READLINE) || defined (LIBCPPTRAJ)
+#   include <stdexcept>
+#   include <string>
+#   include <iostream>
+#else
+#   define READLINE_LIBRARY
+#   include <readline.h>
+#   include <history.h>
+#endif
 #include "ReadLine.h"
 #include "Command.h"
+
+#if defined (NO_READLINE) || defined (LIBCPPTRAJ)
+// CONSTRUCTOR
+ReadLine::ReadLine() {}
+#else
 
 // duplicate_string()
 static char* duplicate_string(const char* s) {
@@ -32,7 +44,7 @@ static char* command_generator(const char* text, int state) {
   }
 
   // Return the next name which partially matches from the command list.
-  while ( (name = Command::CmdToken(list_index).Cmd) != 0 )
+  while ( (name = Command::CmdToken(list_index)) != 0 )
   {
     list_index++;
     if (strncmp(name, text, len) == 0)
@@ -57,52 +69,59 @@ ReadLine::ReadLine() {
   // Tell the completer that we want a crack first.
   rl_attempted_completion_function = cpptraj_completion;
 }
+#endif
 
 // -----------------------------------------------------------------------------
 /** Get next input line with readline. Lines terminated with a backslash
   * will be concatenated. Comments will be ignored.
   */
 int ReadLine::GetInput() {
-  input_.clear();
+  input_.Clear();
+# if defined (NO_READLINE) || defined (LIBCPPTRAJ)
+  mprintf("> ");
+  std::string inp;
+  getline(std::cin, inp);
+  if (inp.size() == 0 && std::cin.eof()) return 1; // EOF
+  bool moreInput = input_.AddInput( inp.c_str() );
+  while ( moreInput ) {
+      getline(std::cin, inp);
+      moreInput = input_.AddInput( inp.c_str() );
+  }
+# else
   char* line = readline("> ");
   if (line == 0) return 1; // EOF
-  input_ += line;
-  // Terminal backslash requests a continuation of the line
-  size_t end = strlen( line );
-  while (end > 1 && line[end - 1] == '\\') {
-    // Remove that backlash
-    size_t bs_pos = input_.find_last_of('\\');
-    input_.erase( bs_pos, 1 );
+  bool moreInput = input_.AddInput( line );
+  while ( moreInput ) {
     free( line );
     line = readline("");
-    if (line == 0) break;
-    input_ += line;
-    end = strlen( line );
-  }
-  // Remove leading whitespace.
-  std::string::iterator beg = input_.begin();
-  while ( beg != input_.end() && isspace(*beg) )
-    beg = input_.erase(beg);
-  // Find '#' not preceded by blackslash; indicates comment.
-  // Remove it and all after.
-  end = input_.find_first_of('#');
-  if (end != std::string::npos) {
-    if (end == 0 || (end > 0 && input_[end-1] != '\\'))
-      input_.erase( input_.begin() + end, input_.end() );
+    moreInput = input_.AddInput( line );
   }
   // Add line to history
-  if (!input_.empty()) AddHistory(input_.c_str());
+  if (!input_.Empty()) AddHistory(input_.str());
   if (line != 0) free( line );
+# endif
   return 0;
 }
 
 void ReadLine::AddHistory(const char* line) {
+# if defined (NO_READLINE) || defined (LIBCPPTRAJ)
+  throw std::runtime_error("Internal Error: readline not enabled; history "
+                           "storage not supported");
+# else
   if (line != 0) add_history( line );
+# endif
 }
 
 bool ReadLine::YesNoPrompt(const char* prompt) {
+# if defined (NO_READLINE) || defined (LIBCPPTRAJ)
+  mprintf(prompt);
+  std::string line;
+  getline(std::cin, line);
+  if (line.size() == 0) return false;
+# else
   char* line = readline(prompt);
   if (line == 0 || strlen( line ) < 1) return false;
+# endif
   if (line[0] == 'y' || line[0] == 'Y') return true;
   return false;
 }

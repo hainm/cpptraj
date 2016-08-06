@@ -6,8 +6,8 @@
 class Action_Energy: public Action {
   public:
     Action_Energy();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_Energy(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_Energy(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
@@ -26,6 +26,5 @@ class Action_Energy: public Action {
     CharMask Mask1_;               ///< Char mask for all but NB calc
     AtomMask Imask_;               ///< Int mask for NB calc
     Energy_Amber ENE_;             ///< Energy calc class.
-    Energy_Sander SANDER_;
 };
 #endif

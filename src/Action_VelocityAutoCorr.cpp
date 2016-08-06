@@ -6,7 +6,7 @@
 #include "Constants.h"
 #include "Corr.h"
 #ifdef _OPENMP
-#  include "omp.h"
+#  include <omp.h>
 #endif
 
 // CONSTRUCTOR
@@ -14,7 +14,7 @@ Action_VelocityAutoCorr::Action_VelocityAutoCorr() :
   useVelInfo_(false), useFFT_(false), normalize_(false), VAC_(0), tstep_(0.0),
   maxLag_(0) {}
 
-void Action_VelocityAutoCorr::Help() {
+void Action_VelocityAutoCorr::Help() const {
   mprintf("\t[<set name>] [<mask>] [usevelocity] [out <filename>]\n"
           "\t[maxlag <time>] [tstep <timestep>] [direct] [norm]\n"
           "  Calculate velocity auto-correlation function for atoms in <mask>\n");
@@ -33,9 +33,14 @@ Action::RetType Action_VelocityAutoCorr::Init(ArgList& actionArgs, ActionInit& i
   // Set up output data set
   VAC_ = init.DSL().AddSet(DataSet::DOUBLE, actionArgs.GetStringNext(), "VAC");
   if (VAC_ == 0) return Action::ERR;
-  VAC_->Dim(0).SetStep( tstep_ );
-  if (outfile != 0) outfile->AddDataSet( VAC_ ); 
-
+  if (outfile != 0) outfile->AddDataSet( VAC_ );
+# ifdef MPI
+  trajComm_ = init.TrajComm(); 
+  if (trajComm_.Size() > 1 && !useVelInfo_)
+    mprintf("\nWarning: When calculating velocities between consecutive frames,\n"
+            "\nWarning:   'velocityautocorr' in parallel will not work correctly if\n"
+            "\nWarning:   coordinates have been modified by previous actions (e.g. 'rms').\n\n");
+# endif
   mprintf("    VELOCITYAUTOCORR:\n"
           "\tCalculate velocity auto-correlation function for atoms in mask '%s'\n",
           mask_.MaskString());
@@ -112,6 +117,30 @@ Action::RetType Action_VelocityAutoCorr::DoAction(int frameNum, ActionFrame& frm
   }
   return Action::OK;
 }
+
+#ifdef MPI
+int Action_VelocityAutoCorr::ParallelPreloadFrames(FArray const& preload_frames) {
+  unsigned int idx = preload_frames.size() - 1;
+  previousFrame_ = preload_frames[idx];
+  return 0;
+}
+
+int Action_VelocityAutoCorr::SyncAction() {
+  if (Vel_.empty()) return 0;
+  // Get total number of frames. Assume same # vectors in each thread.
+  int nframes = (int)Vel_[0].Size();
+  std::vector<int> rank_frames( trajComm_.Size() );
+  trajComm_.GatherMaster( &nframes, 1, MPI_INT, &rank_frames[0] );
+  int total_frames = 0;
+  if (trajComm_.Master())
+    for (int rank = 0; rank < trajComm_.Size(); rank++)
+      total_frames += rank_frames[rank];
+  // Sync each vector set.
+  for (VelArray::iterator vel = Vel_.begin(); vel != Vel_.end(); ++vel)
+    vel->Sync( total_frames, rank_frames, trajComm_ );
+  return 0;
+}
+#endif
 
 // Action_VelocityAutoCorr::Print()
 void Action_VelocityAutoCorr::Print() {
@@ -214,6 +243,7 @@ void Action_VelocityAutoCorr::Print() {
       //Ct[t] /= (double)Vel_.size();
   }
   // Integration to get diffusion coefficient.
+  VAC_->SetDim(Dimension::X, Dimension(1.0, tstep_, "Frame"));
   mprintf("\tIntegrating data set %s, step is %f\n", VAC_->legend(), VAC_->Dim(0).Step());
   DataSet_Mesh mesh;
   mesh.SetMeshXY( static_cast<DataSet_1D const&>(*VAC_) );

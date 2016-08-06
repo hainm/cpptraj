@@ -1,9 +1,11 @@
-#ifdef TIMER
-#include "Timer.h" 
-#endif
 #include "DataFile.h"
 #include "CpptrajStdio.h"
-#include "StringRoutines.h" // integerToString
+#ifdef TIMER
+# include "Timer.h"
+#endif
+#ifdef MPI
+# include "Parallel.h"
+#endif
 // All DataIO classes go here
 #include "DataIO_Std.h"
 #include "DataIO_Grace.h"
@@ -15,9 +17,10 @@
 #include "DataIO_Evecs.h"
 #include "DataIO_VecTraj.h"
 #include "DataIO_XVG.h"
+#include "DataIO_CCP4.h"
+#include "DataIO_Cmatrix.h"
+#include "DataIO_NC_Cmatrix.h"
 
-// TODO: Support these args:
-//       - xlabel, xmin, xstep, time (all dimensions).
 // CONSTRUCTOR
 DataFile::DataFile() :
   debug_(0),
@@ -29,20 +32,12 @@ DataFile::DataFile() :
   default_width_(-1),
   default_precision_(-1),
   dataio_(0),
-  defaultDim_(3) // default to X/Y/Z dims
-{
-  for (std::vector<Dimension>::iterator dim = defaultDim_.begin(); 
-                                        dim!=defaultDim_.end(); ++dim)
-  {
-    (*dim).SetMin(1.0);
-    (*dim).SetStep(1.0);
-  }
-}
+  defaultDim_(3), // default to X/Y/Z dims
+  minIsSet_(3, false)
+{}
 
 // DESTRUCTOR
-DataFile::~DataFile() {
-  if (dataio_ != 0) delete dataio_;
-}
+DataFile::~DataFile() { if (dataio_ != 0) delete dataio_; }
 
 // ----- STATIC VARS / ROUTINES ------------------------------------------------
 // NOTE: Must be in same order as DataFormatType
@@ -51,12 +46,19 @@ const FileTypes::AllocToken DataFile::DF_AllocArray[] = {
   { "Grace File",         0,                       DataIO_Grace::WriteHelp,  DataIO_Grace::Alloc  },
   { "Gnuplot File",       0,                       DataIO_Gnuplot::WriteHelp,DataIO_Gnuplot::Alloc},
   { "Xplor File",         0,                       0,                        DataIO_Xplor::Alloc  },
-  { "OpenDX File",        0,                       0,                        DataIO_OpenDx::Alloc },
+  { "OpenDX File",        0,                       DataIO_OpenDx::WriteHelp, DataIO_OpenDx::Alloc },
   { "Amber REM log",      DataIO_RemLog::ReadHelp, 0,                        DataIO_RemLog::Alloc },
   { "Amber MDOUT file",   0,                       0,                        DataIO_Mdout::Alloc  },
   { "Evecs file",         DataIO_Evecs::ReadHelp,  0,                        DataIO_Evecs::Alloc  },
   { "Vector pseudo-traj", 0,                       DataIO_VecTraj::WriteHelp,DataIO_VecTraj::Alloc},
   { "XVG file",           0,                       0,                        DataIO_XVG::Alloc    },
+  { "CCP4 file",          0,                       DataIO_CCP4::WriteHelp,   DataIO_CCP4::Alloc   },
+  { "Cluster matrix file",0,                       0,                        DataIO_Cmatrix::Alloc},
+# ifdef BINTRAJ
+  { "NetCDF Cluster matrix file", 0,               0,                     DataIO_NC_Cmatrix::Alloc},
+# else
+  { "NetCDF Cluster matrix file", 0, 0, 0 },
+# endif
   { "Unknown Data file",  0,                       0,                        0                    }
 };
 
@@ -73,6 +75,9 @@ const FileTypes::KeyToken DataFile::DF_KeyArray[] = {
   { EVECS,        "evecs",  ".evecs" },
   { VECTRAJ,      "vectraj",".vectraj" },
   { XVG,          "xvg",    ".xvg"   },
+  { CCP4,         "ccp4",   ".ccp4"  },
+  { CMATRIX,      "cmatrix",".cmatrix" },
+  { NCCMATRIX,    "nccmatrix", ".nccmatrix" },
   { UNKNOWN_DATA, 0,        0        }
 };
 
@@ -117,7 +122,7 @@ int DataFile::ReadDataIn(FileName const& fnameIn, ArgList const& argListIn,
   if (dataio_ != 0) delete dataio_;
   dataio_ = 0;
   if (!File::Exists(fnameIn)) {
-    mprinterr("Error: File '%s' does not exist.\n", fnameIn.full());
+    File::ErrorMsg( fnameIn.full() );
     return 1;
   }
   filename_ = fnameIn;
@@ -152,6 +157,7 @@ int DataFile::ReadDataIn(FileName const& fnameIn, ArgList const& argListIn,
 # endif
   int err = dataio_->processReadArgs(argIn);
   if (err == 0) {
+    // FIXME in parallel mark data sets as synced if all threads read.
     err += dataio_->ReadData( filename_, datasetlist, dsname );
     // Treat any remaining arguments as file names.
     std::string nextFile = argIn.GetStringNext();
@@ -178,7 +184,7 @@ int DataFile::ReadDataOfType(FileName const& fnameIn, DataFormatType typeIn,
   if (dataio_ != 0) delete dataio_;
   dataio_ = 0;
   if (!File::Exists( fnameIn )) {
-    mprinterr("Error: File '%s' does not exist.\n", fnameIn.full());
+    File::ErrorMsg( fnameIn.full() );
     return 1;
   }
   filename_ = fnameIn;
@@ -191,10 +197,19 @@ int DataFile::ReadDataOfType(FileName const& fnameIn, DataFormatType typeIn,
 // -----------------------------------------------------------------------------
 // DataFile::SetupDatafile()
 int DataFile::SetupDatafile(FileName const& fnameIn, ArgList& argIn, int debugIn) {
+  return SetupDatafile(fnameIn, argIn, UNKNOWN_DATA, debugIn);
+}
+
+int DataFile::SetupDatafile(FileName const& fnameIn, ArgList& argIn,
+                            DataFormatType typeIn, int debugIn)
+{
   SetDebug( debugIn );
   if (fnameIn.empty()) return Error("Error: No data file name specified.\n");
   filename_ = fnameIn;
-  dfType_ = (DataFormatType)FileTypes::GetFormatFromArg(DF_KeyArray, argIn, UNKNOWN_DATA );
+  dfType_ = typeIn;
+  // If unknown, first look for keyword, then guess from extension.
+  if (dfType_ == UNKNOWN_DATA)
+    dfType_ = (DataFormatType)FileTypes::GetFormatFromArg(DF_KeyArray, argIn, UNKNOWN_DATA );
   if (dfType_ == UNKNOWN_DATA)
     dfType_ = (DataFormatType)FileTypes::GetTypeFromExtension(DF_KeyArray, filename_.Ext(),
                                                               DATAFILE);
@@ -206,28 +221,16 @@ int DataFile::SetupDatafile(FileName const& fnameIn, ArgList& argIn, int debugIn
   return 0;
 }
 
-int DataFile::SetupStdout(ArgList& argIn, int debugIn) {
+int DataFile::SetupStdout(ArgList const& argIn, int debugIn) {
   SetDebug( debugIn );
   filename_.clear();
   dataio_ = (DataIO*)FileTypes::AllocIO( DF_AllocArray, DATAFILE, false );
   if (dataio_ == 0) return Error("Error: Data file allocation failed.\n");
-  if (!argIn.empty())
-    ProcessArgs( argIn );
+  if (!argIn.empty()) {
+    ArgList args( argIn );
+    ProcessArgs( args );
+  }
   return 0;
-}
-
-/** Assumes file has been already created by e.g. an Action, but we are now
-  * in CpptrajState::RunEnsemble() and this file needs to be set up for a
-  * particular member (only if not already done).
-  */
-void DataFile::SetMember(int memberIn) {
-  if (member_ == -1) { // Not yet designated member of ensemble.
-    member_ = memberIn;
-    if (filename_.AppendFileName( "." + integerToString(member_) ))
-      rprinterr("Internal Error: DataFile::SetMember(): No filename set.\n");
-  } else if (member_ != memberIn) // Another sanity check.
-    rprinterr("Internal Error: DataFile::SetMember(): Trying to change member %i to %i\n",
-              member_, memberIn);
 }
 
 // DataFile::AddDataSet()
@@ -274,6 +277,15 @@ int DataFile::AddDataSet(DataSet* dataIn) {
   // Set default width.precision
   if (setDataSetPrecision_)
     dataIn->SetupFormat().SetFormatWidthPrecision( default_width_, default_precision_ );
+  // Set default label/min/step
+  for (unsigned int nd = 0; nd != std::min(defaultDim_.size(), dataIn->Ndim()); nd++) {
+    Dimension dim = dataIn->Dim(nd); 
+    if (!defaultDim_[nd].label_.empty()) dim.SetLabel( defaultDim_[nd].label_ );
+    if (defaultDim_[nd].step_ != 0.0)    dim.ChangeStep( defaultDim_[nd].step_ );
+    if (minIsSet_[nd])                   dim.ChangeMin( defaultDim_[nd].min_ );
+    dataIn->SetDim(nd, dim);
+  }
+  // Add copy of set to this DataFile
   SetList_.AddCopyOfSet( dataIn );
   // Reset dflWrite status
   dflWrite_ = true;
@@ -287,24 +299,35 @@ int DataFile::RemoveDataSet(DataSet* dataIn) {
   return 0;
 }
 
-// DataFile::ProcessArgs()
+// DataFile::ProcessArgs() // FIXME make WriteArgs
 int DataFile::ProcessArgs(ArgList &argIn) {
   if (dataio_==0) return 1;
-  // Axis args.
-  defaultDim_[0].SetLabel( argIn.GetStringKey("xlabel") );
-  defaultDim_[1].SetLabel( argIn.GetStringKey("ylabel") );
-  defaultDim_[2].SetLabel( argIn.GetStringKey("zlabel") );
-  // Axis min/step
-  defaultDim_[0].SetMin( argIn.getKeyDouble("xmin",1.0) );
-  defaultDim_[1].SetMin( argIn.getKeyDouble("ymin",1.0) );
-  defaultDim_[2].SetMin( argIn.getKeyDouble("zmin",1.0) );
-  defaultDim_[0].SetStep( argIn.getKeyDouble("xstep", 1.0) );
-  defaultDim_[1].SetStep( argIn.getKeyDouble("ystep", 1.0) );
-  defaultDim_[2].SetStep( argIn.getKeyDouble("zstep", 1.0) );
+  // Dimension labels 
+  defaultDim_[0].label_ = argIn.GetStringKey("xlabel");
+  defaultDim_[1].label_ = argIn.GetStringKey("ylabel");
+  defaultDim_[2].label_ = argIn.GetStringKey("zlabel");
+  // Dimension mins
+  if (argIn.Contains("xmin")) {
+    defaultDim_[0].min_ = argIn.getKeyDouble("xmin",1.0);
+    minIsSet_[0] = true;
+  }
+  if (argIn.Contains("ymin")) {
+    defaultDim_[1].min_ = argIn.getKeyDouble("ymin",1.0);
+    minIsSet_[1] = true;
+  }
+  if (argIn.Contains("zmin")) {
+    defaultDim_[2].min_ = argIn.getKeyDouble("zmin",1.0);
+    minIsSet_[2] = true;
+  }
+  // Dimension steps
+  defaultDim_[0].step_ = argIn.getKeyDouble("xstep", 0.0);
+  defaultDim_[1].step_ = argIn.getKeyDouble("ystep", 0.0);
+  defaultDim_[2].step_ = argIn.getKeyDouble("zstep", 0.0);
   // ptraj 'time' keyword
   if (argIn.Contains("time")) {
-    defaultDim_[0].SetStep( argIn.getKeyDouble("time", 1.0) );
-    defaultDim_[0].SetMin( defaultDim_[0].Step() );
+    defaultDim_[0].step_ = argIn.getKeyDouble("time", 1.0);
+    defaultDim_[0].min_ = defaultDim_[0].step_;;
+    minIsSet_[0] = true;
   }
   // Default DataSet width/precision
   std::string prec_str = argIn.GetStringKey("prec");
@@ -332,6 +355,15 @@ int DataFile::ProcessArgs(std::string const& argsIn) {
 
 // DataFile::WriteDataOut()
 void DataFile::WriteDataOut() {
+# ifdef MPI
+  if (!Parallel::TrajComm().Master()) {
+    if (debug_ > 0)
+      rprintf("DEBUG: Not a trajectory master: skipping data file write on this rank.\n");
+    return;
+  }
+# endif
+  if (debug_ > 0)
+    rprintf("DEBUG: Writing file '%s'\n", DataFilename().full());
   //mprintf("DEBUG:\tFile %s has %i sets, dimension=%i, maxFrames=%i\n", dataio_->FullFileStr(),
   //        SetList_.size(), dimenison_, maxFrames);
   // Loop over all sets, decide which ones should be written.
@@ -346,28 +378,13 @@ void DataFile::WriteDataOut() {
     }
     // Setup formats with a leading space initially. Maintains backwards compat. 
     ds.SetupFormat().SetFormatAlign(TextFormat::LEADING_SPACE);
-    // Ensure current DataIO is valid for this set.
+    // Ensure current DataIO is valid for this set. May not be needed right now
+    // but useful in case file format can be changed later on.
     if (!dataio_->CheckValidFor( ds )) {
       mprinterr("Error: DataSet '%s' is not valid for DataFile '%s' format.\n",
                  ds.legend(), filename_.base());
       continue;
     }
-    // Set default min and step for all dimensions if not already set.
-    for (unsigned int nd = 0; nd < ds.Ndim(); ++nd) {
-      Dimension& dim = ds.Dim(nd);
-      double min, step;
-      if (nd < 3) {
-        min = defaultDim_[nd].Min();
-        step = defaultDim_[nd].Step();
-      } else {
-        min = 1.0;
-        step = 1.0;
-      }
-      if (!dim.MinIsSet()) dim.SetMin( min );
-      if (dim.Step() < 0 ) dim.SetStep( step );
-    }
-    // Set x label if not already set
-    if (ds.Ndim()==1 && ds.Dim(0).Label().empty()) ds.Dim(0).SetLabel("Frame");
     setsToWrite.AddCopyOfSet( SetList_[idx] );
   }
   if (setsToWrite.empty()) {

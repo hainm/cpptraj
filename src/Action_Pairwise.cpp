@@ -4,6 +4,7 @@
 #include "CpptrajStdio.h"
 #include "Trajout_Single.h"
 #include "Constants.h" // ELECTOAMBER
+#include "StringRoutines.h" // ByteString()
 
 // CONSTRUCTOR
 Action_Pairwise::Action_Pairwise() :
@@ -22,7 +23,7 @@ Action_Pairwise::Action_Pairwise() :
   Eout_(0)
 {} 
 
-void Action_Pairwise::Help() {
+void Action_Pairwise::Help() const {
   mprintf("\t[<name>] [<mask>] [out <filename>] [cuteelec <ecut>] [cutevdw <vcut>]\n"
           "\t[ %s ] [cutout <cut mol2 prefix>]\n"
           "\t[vmapout <vdw map>] [emapout <elec map>] [avgout <avg file>]\n"
@@ -39,6 +40,13 @@ const double Action_Pairwise::QFAC = Constants::ELECTOAMBER * Constants::ELECTOA
 // Action_Pairwise::Init()
 Action::RetType Action_Pairwise::Init(ArgList& actionArgs, ActionInit& init, int debugIn)
 {
+# ifdef MPI
+  if (init.TrajComm().Size() > 1) {
+    mprinterr("Error: 'pairwise' action does not work with > 1 thread (%i threads currently).\n",
+              init.TrajComm().Size());
+    return Action::ERR;
+  }
+# endif
   // Get Keywords
   DataFile* dataout = init.DFL().AddDataFile( actionArgs.GetStringKey("out"), actionArgs );
   DataFile* vmapout = init.DFL().AddDataFile( actionArgs.GetStringKey("vmapout"), actionArgs );
@@ -116,9 +124,9 @@ Action::RetType Action_Pairwise::Init(ArgList& actionArgs, ActionInit& init, int
   if (nb_calcType_ == COMPARE_REF) { 
     mprintf("\tReference %s, mask [%s]\n", REF.refName(), RefMask_.MaskString());
     mprintf("\tReference energy (kcal/mol): EVDW= %12.5e  EELEC= %12.5e\n", ELJ_, Eelec_);
-    mprintf("\tSize of reference energy array is %zu elements (%.4f MB)\n",
+    mprintf("\tSize of reference energy array is %zu elements (%s)\n",
             ref_nonbondEnergy_.size(),
-            (double)(ref_nonbondEnergy_.size() * 2 * sizeof(double)) / 1024000.0);
+            ByteString(ref_nonbondEnergy_.size() * 2 * sizeof(double), BYTE_DECIMAL).c_str());
   }
   mprintf("\tEelec absolute cutoff (kcal/mol): %.4f\n", cut_eelec_);
   mprintf("\tEvdw absolute cutoff (kcal/mol) : %.4f\n", cut_evdw_);
@@ -140,7 +148,7 @@ int Action_Pairwise::SetupNonbondParm(AtomMask const& maskIn, Topology const& Pa
   // Check if LJ parameters present - need at least 2 atoms for it to matter.
   if (ParmIn.Natom() > 1 && !ParmIn.Nonbond().HasNonbond()) {
     mprinterr("Error: Topology does not have LJ information.\n");
-    return 1;
+    return -1;
   }
 
   // Determine the actual number of pairwise interactions that will be calcd.
@@ -179,7 +187,7 @@ Action::RetType Action_Pairwise::Setup(ActionSetup& setup) {
 
   // Set up exclusion list and determine total # interactions.
   int N_interactions = SetupNonbondParm(Mask0_, setup.Top());
-
+  if (N_interactions == -1) return Action::ERR;
   // Allocate matrix memory
   int previous_size = (int)vdwMat_->Size();
   if (previous_size == 0) {
@@ -423,17 +431,17 @@ Action::RetType Action_Pairwise::DoAction(int frameNum, ActionFrame& frm) {
   // Reset cumulative energy arrays
   atom_eelec_.assign(CurrentParm_->Natom(), 0.0);
   atom_evdw_.assign(CurrentParm_->Natom(), 0.0);
-  if (Eout_ != 0) Eout_->Printf("PAIRWISE: Frame %i\n",frameNum);
+  if (Eout_ != 0) Eout_->Printf("PAIRWISE: Frame %i\n",frm.TrajoutNum());
   NonbondEnergy( frm.Frm(), *CurrentParm_, Mask0_ );
   nframes_++;
   // Write cumulative energy arrays
-  if (PrintCutAtoms( frm.Frm(), frameNum, VDWOUT, atom_evdw_, cut_evdw_ ))
+  if (PrintCutAtoms( frm.Frm(), frm.TrajoutNum(), VDWOUT, atom_evdw_, cut_evdw_ ))
     return Action::ERR;
-  if (PrintCutAtoms( frm.Frm(), frameNum, ELECOUT, atom_eelec_, cut_eelec_ ))
+  if (PrintCutAtoms( frm.Frm(), frm.TrajoutNum(), ELECOUT, atom_eelec_, cut_eelec_ ))
     return Action::ERR;
   // Write PDB with atoms that satisfy cutoff colored in.
   if (PdbOut_.IsOpen()) {
-    PdbOut_.WriteMODEL(frameNum + 1);
+    PdbOut_.WriteMODEL(frm.TrajoutNum() + 1); // FIXME in parallel this needs to be separate files
     for (AtomMask::const_iterator atom = Mask0_.begin(); atom != Mask0_.end(); ++atom)
     {
       float occ = 0.0;
@@ -458,6 +466,7 @@ Action::RetType Action_Pairwise::DoAction(int frameNum, ActionFrame& frm) {
 }
 
 void Action_Pairwise::Print() {
+  if (nframes_ < 1) return;
   // Divide matrices by # of frames
   double norm = 1.0 / (double)nframes_;
   for (unsigned int i = 0; i != vdwMat_->Size(); i++)

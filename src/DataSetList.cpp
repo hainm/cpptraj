@@ -19,6 +19,9 @@
 #include "DataSet_Coords_REF.h"
 #include "DataSet_Mat3x3.h"
 #include "DataSet_Topology.h"
+#include "DataSet_Cmatrix_MEM.h"
+#include "DataSet_Cmatrix_NOMEM.h"
+#include "DataSet_Cmatrix_DISK.h"
 
 // IMPORTANT: THIS ARRAY MUST CORRESPOND TO DataSet::DataType
 const DataSetList::DataToken DataSetList::DataArray[] = {
@@ -39,20 +42,30 @@ const DataSetList::DataToken DataSetList::DataArray[] = {
   { "reference",     DataSet_Coords_REF::Alloc }, // REF_FRAME
   { "3x3 matrices",  DataSet_Mat3x3::Alloc     }, // MAT3X3
   { "topology",      DataSet_Topology::Alloc   }, // TOPOLOGY
+  { "cluster matrix",DataSet_Cmatrix_MEM::Alloc}, // CMATRIX
+  { "cluster matrix (no memory)",DataSet_Cmatrix_NOMEM::Alloc}, // CMATRIX_NOMEM
+  { "cluster matrix (disk)",     DataSet_Cmatrix_DISK::Alloc},  // CMATRIX_DISK
   { 0, 0 }
 };
 
 // CONSTRUCTOR
 DataSetList::DataSetList() :
-  activeRef_(0),maxFrames_(-1), debug_(0), ensembleNum_(-1), hasCopies_(false),
+  activeRef_(0),
+  maxFrames_(-1),
+  debug_(0),
+  ensembleNum_(-1),
+  hasCopies_(false),
   dataSetsPending_(false)
+# ifdef MPI
+  , newSetsNeedSync_(false)
+# endif
 {}
 
 // DESTRUCTOR
-DataSetList::~DataSetList() { Clear(); }
+DataSetList::~DataSetList() { ClearAll(); }
 
-// DataSetList::Clear()
-void DataSetList::Clear() {
+// DataSetList::ClearAll()
+void DataSetList::ClearAll() {
   if (!hasCopies_)
     for (DataListType::iterator ds = DataList_.begin(); ds != DataList_.end(); ++ds) 
       delete *ds;
@@ -61,8 +74,27 @@ void DataSetList::Clear() {
   TopList_.clear();
   hasCopies_ = false;
   dataSetsPending_ = false;
+# ifdef MPI
+  newSetsNeedSync_ = false;
+# endif
   activeRef_ = 0;
 } 
+
+// DataSetList::Clear()
+void DataSetList::Clear() {
+  DataListType setsToErase;
+  DataListType setsToKeep;
+  setsToKeep.reserve( RefList_.size() + TopList_.size() );
+  for (DataListType::const_iterator ds = DataList_.begin(); ds != DataList_.end(); ++ds)
+    if ( (*ds)->Type() == DataSet::REF_FRAME || (*ds)->Type() == DataSet::TOPOLOGY )
+      setsToKeep.push_back( *ds );
+    else
+      setsToErase.push_back( *ds );
+  if (!hasCopies_)
+    for (DataListType::iterator ds = setsToErase.begin(); ds != setsToErase.end(); ++ds)
+      delete *ds;
+  DataList_ = setsToKeep;
+}
 
 // DataSetList::Push_Back()
 void DataSetList::Push_Back(DataSet* ds) {
@@ -90,14 +122,8 @@ DataSetList& DataSetList::operator+=(DataSetList const& rhs) {
   return *this;
 }
 
-// DataSetList::SetDebug()
-void DataSetList::SetDebug(int debugIn) {
-  debug_ = debugIn;
-  if (debug_>0)
-    mprintf("DataSetList Debug Level set to %i\n",debug_);
-}
-
 // DataSetList::MakeDataSetsEnsemble()
+/*
 void DataSetList::MakeDataSetsEnsemble(int ensembleNumIn) {
   ensembleNum_ = ensembleNumIn;
   for (DataListType::const_iterator ds = DataList_.begin();
@@ -105,6 +131,7 @@ void DataSetList::MakeDataSetsEnsemble(int ensembleNumIn) {
     if ( (*ds)->Meta().EnsembleNum() == -1 )
       (*ds)->SetEnsemble( ensembleNum_ );
 }
+*/
 
 /** Call Allocate for each time series in the list. */
 void DataSetList::AllocateSets(long int maxFrames) {
@@ -141,8 +168,8 @@ void DataSetList::PendingWarning() const {
 }
 
 // -----------------------------------------------------------------------------
-/** Remove the specified set from all lists if found, and optionally free
-  * memory.
+/** Remove the specified set from all lists if found.
+  * \param freeMemory If true, also free DataSet memory.
   * \return dsIn if found and removed/erased, 0 otherwise.
   */
 DataSet* DataSetList::EraseSet( DataSet* dsIn, bool freeMemory ) {
@@ -204,7 +231,7 @@ DataSet* DataSetList::GetDataSet( std::string const& nameIn ) const {
     PendingWarning();
     return 0;
   } else if (dsetOut.size() > 1)
-    mprintf("Warning: '%s' selects multiple sets, only using first set.\n");
+    mprintf("Warning: '%s' selects multiple sets, only using first set.\n", nameIn.c_str());
   return dsetOut[0];
 }
 
@@ -215,6 +242,18 @@ DataSetList DataSetList::GetMultipleSets( std::string const& dsargIn ) const {
     mprintf("Warning: '%s' selects no data sets.\n", dsargIn.c_str());
     PendingWarning();
   }
+  return dsetOut;
+}
+
+// DataSetList::GetSetsOfType()
+DataSetList DataSetList::GetSetsOfType( std::string const& dsargIn, DataSet::DataType typeIn ) const
+{
+  DataSetList dsetOut;
+  dsetOut.hasCopies_ = true;
+  DataSetList selected = SelectSets(dsargIn);
+  for (const_iterator ds = selected.begin(); ds != selected.end(); ++ds)
+    if ( (*ds)->Type() == typeIn )
+      dsetOut.Push_Back( *ds );
   return dsetOut;
 }
 
@@ -258,7 +297,7 @@ DataSet* DataSetList::FindSetOfType(std::string const& nameIn, DataSet::DataType
   if (dsetOut.empty())
     return 0;
   else if (dsetOut.size() > 1)
-    mprintf("Warning: '%s' selects multiple sets. Only using first.\n");
+    mprintf("Warning: '%s' selects multiple sets. Only using first.\n", nameIn.c_str());
   return dsetOut[0];
 }
 
@@ -316,6 +355,9 @@ DataSet* DataSetList::AddSet( DataSet::DataType inType, MetaData const& metaIn,
   */ 
 DataSet* DataSetList::AddSet(DataSet::DataType inType, MetaData const& metaIn)
 { // TODO Always generate default name if empty?
+# ifdef TIMER
+  time_total_.Start();
+# endif
   // Do not add to a list with copies
   if (hasCopies_) {
     mprinterr("Internal Error: Attempting to add DataSet (%s) to DataSetList with copies.\n",
@@ -324,8 +366,14 @@ DataSet* DataSetList::AddSet(DataSet::DataType inType, MetaData const& metaIn)
   }
   MetaData meta( metaIn );
   meta.SetEnsembleNum( ensembleNum_ );
+# ifdef TIMER
+  time_check_.Start();
+# endif
   // Check if DataSet with same attributes already present.
   DataSet* DS = CheckForSet(meta);
+# ifdef TIMER
+  time_check_.Stop();
+# endif
   if (DS != 0) {
     mprintf("Warning: DataSet '%s' already present.\n", DS->Meta().PrintName().c_str());
     // NOTE: Should return found dataset?
@@ -336,23 +384,92 @@ DataSet* DataSetList::AddSet(DataSet::DataType inType, MetaData const& metaIn)
     mprinterr("Internal Error: No allocator for DataSet type [%s]\n", token->Description);
     return 0;
   }
+# ifdef TIMER
+  time_setup_.Start();
+# endif
   DS = (DataSet*)token->Alloc();
   if (DS==0) {
     mprinterr("Internal Error: DataSet %s memory allocation failed.\n", meta.PrintName().c_str());
     return 0;
   }
   // If 1 dim set and time series status not set, set to true.
-  if (meta.TimeSeries() == MetaData::UNKNOWN_TS && DS->Ndim() == 1) 
+  if (meta.TimeSeries() == MetaData::UNKNOWN_TS && DS->Ndim() == 1) {
     meta.SetTimeSeries( MetaData::IS_TS );
+    // Also set dimension default
+    DS->SetDim(Dimension::X, Dimension(1.0, 1.0, "Frame") );
+  }
   // Set up dataset 
   if ( DS->SetMeta( meta ) ) {
     mprinterr("Error setting up data set %s.\n", meta.PrintName().c_str());
     delete DS;
     return 0;
   }
-
-  Push_Back(DS); 
+# ifdef MPI
+  if (newSetsNeedSync_) DS->SetNeedsSync( true );
+# endif
+# ifdef TIMER
+  time_setup_.Stop();
+  time_push_.Start();
+# endif
+  Push_Back(DS);
+# ifdef TIMER
+  time_push_.Stop();
+# endif
   //fprintf(stderr,"ADDED dataset %s\n",dsetName);
+  return DS;
+}
+
+#ifdef TIMER
+void DataSetList::Timing() const {
+  time_check_.WriteTiming(3,"DSL Check Set", time_total_.Total());
+  time_setup_.WriteTiming(3,"DSL Setup Set", time_total_.Total());
+  time_push_.WriteTiming(3,"DSL Push Set", time_total_.Total());
+  time_total_.WriteTiming(2,"DSL Total");
+}
+#endif
+// FIXME Should probably just make a more efficient search of DSL
+/** Special version of AddSet that does NOT check if set already exists.
+  * Intended for use in Action Setup/DoAction where it is assumed that
+  * the Action is setting up DataSets in such a way that there will not
+  * be name conflicts, i.e. the DataSet name at least is unique.
+  * \param inType type of DataSet to add.
+  * \param metaIn DataSet MetaData.
+  * \return pointer to successfully set-up DataSet or 0 if error.
+  */
+DataSet* DataSetList::AddSet_NoCheck(DataSet::DataType inType, MetaData const& metaIn)
+{ // TODO Pass in Nframes?
+  // Assume list does NOT have copies.
+  MetaData meta( metaIn );
+  meta.SetEnsembleNum( ensembleNum_ );
+  // Allocate DataSet
+  TokenPtr token = &(DataArray[inType]);
+  if ( token->Alloc == 0) {
+    mprinterr("Internal Error: No allocator for DataSet type [%s]\n", token->Description);
+    return 0;
+  }
+  DataSet* DS = (DataSet*)token->Alloc();
+  if (DS==0) {
+    mprinterr("Internal Error: DataSet %s memory allocation failed.\n", meta.PrintName().c_str());
+    return 0;
+  }
+  // If 1 dim set and time series status not set, set to true, allocate for frames.
+  if (meta.TimeSeries() == MetaData::UNKNOWN_TS && DS->Ndim() == 1) {
+    meta.SetTimeSeries( MetaData::IS_TS );
+    // Also set dimension default
+    DS->SetDim(Dimension::X, Dimension(1.0, 1.0, "Frame") );
+    //DS->Allocate( DataSet::SizeArray(1, Nframes) );
+  }
+  // Set up DataSet MetaData
+  if ( DS->SetMeta( meta ) ) {
+    mprinterr("Error setting up data set %s.\n", meta.PrintName().c_str());
+    delete DS;
+    return 0;
+  }
+# ifdef MPI
+  if (newSetsNeedSync_) DS->SetNeedsSync( true );
+# endif
+  // Add to list
+  Push_Back(DS);
   return DS;
 }
 
@@ -372,35 +489,24 @@ int DataSetList::AddSet( DataSet* dsIn ) {
   * and optional X values, add the sets to this list if they do not exist
   * or append any existing sets.
   */
-int DataSetList::AddOrAppendSets(Darray const& Xvals, DataListType const& Sets)
+int DataSetList::AddOrAppendSets(std::string const& XlabelIn, Darray const& Xvals,
+                                 DataListType const& Sets)
 {
   if (debug_ > 0)
-    mprintf("DEBUG: Calling AddOrAppendSets for %zu sets, %zu X values.\n",
-            Sets.size(), Xvals.size());
+    mprintf("DEBUG: Calling AddOrAppendSets for %zu sets, %zu X values, Xlabel= %s.\n",
+            Sets.size(), Xvals.size(), XlabelIn.c_str());
   if (Sets.empty()) return 0; // No error for now.
+  // If no X label assume 'Frame' for backwards compat.
+  std::string Xlabel;
+  if (XlabelIn.empty())
+    Xlabel.assign("Frame");
+  else
+    Xlabel = XlabelIn;
   Dimension Xdim;
   // First determine if X values increase monotonically with a regular step
-  bool isMonotonic = true;
-  double xstep = 1.0;
-  if (Xvals.size() > 1) {
-    xstep = (Xvals.back() - Xvals.front()) / (double)(Xvals.size() - 1);
-    for (Darray::const_iterator X = Xvals.begin()+2; X != Xvals.end(); ++X)
-      if ((*X - *(X-1)) - xstep > Constants::SMALL) {
-        isMonotonic = false;
-        break;
-      }
-    if (isMonotonic) {
-      Xdim.SetMin( Xvals.front() );
-      Xdim.SetMax( Xvals.back() );
-      Xdim.SetStep( xstep );
-      Xdim.SetBins( Xvals.size() );
-    }
-  } else
-    // No X values. set generic X dim.
-    Xdim = Dimension(1.0, 1.0, Sets.front()->Size());
+  bool isMonotonic = Xdim.SetDimension(Xvals, Xlabel);
   if (debug_ > 0) {
-    mprintf("DEBUG: xstep %g xmin %g xmax %g xbins %i\n",
-            Xdim.Step(), Xdim.Min(), Xdim.Max(), Xdim.Bins());
+    mprintf("DEBUG: xstep %g xmin %g\n", Xdim.Step(), Xdim.Min());
     if (isMonotonic) mprintf("DEBUG: Xdim is monotonic.\n");
   }
   for (const_iterator ds = Sets.begin(); ds != Sets.end(); ++ds) {
@@ -428,6 +534,7 @@ int DataSetList::AddOrAppendSets(Darray const& Xvals, DataListType const& Sets)
         DataSet_Mesh& xy = static_cast<DataSet_Mesh&>( *xyptr );
         for (unsigned int i = 0; i != set.Size(); i++)
           xy.AddXY( Xvals[i], set.Dval(i) );
+        xy.SetDim(Dimension::X, Xdim);
         if (debug_ > 0) mprintf(", New set, converted to XY-MESH\n");
         // Free memory since set has now been converted.
         delete *ds;
@@ -484,21 +591,9 @@ void DataSetList::AddCopyOfSet(DataSet* dsetIn) {
   Push_Back( dsetIn );
 }
 
-// DataSetList::List()
-void DataSetList::List() const {
-  if (!hasCopies_) { // No copies; this is a Master DSL.
-    if (DataList_.empty()) return;
-    mprintf("\nDATASETS:\n");
-  } else if (DataList_.empty()) {
-    mprintf("  No data sets.");
-    return;
-  }
-  if (DataList_.size()==1)
-    mprintf("  1 data set:\n");
-  else
-    mprintf("  %zu data sets:\n", DataList_.size());
-  for (unsigned int idx = 0; idx != DataList_.size(); idx++) {
-    DataSet const& dset = static_cast<DataSet const&>( *DataList_[idx] );
+void DataSetList::PrintList(DataListType const& dlist) {
+  for (DataListType::const_iterator ds = dlist.begin(); ds != dlist.end(); ++ds) {
+    DataSet const& dset = static_cast<DataSet const&>( *(*ds) );
     mprintf("\t%s \"%s\" (%s%s), size is %zu", dset.Meta().PrintName().c_str(), dset.legend(),
             DataArray[dset.Type()].Description, dset.Meta().ScalarDescription().c_str(),
             dset.Size());
@@ -506,16 +601,94 @@ void DataSetList::List() const {
     mprintf("\n");
   }
 }
+
+// DataSetList::List()
+void DataSetList::List() const {
+  if (!hasCopies_) { // No copies; this is a Master DSL.
+    if (DataList_.empty()) return;
+    mprintf("\nDATASETS (%zu total):\n", DataList_.size());
+  } else if (DataList_.empty()) {
+    mprintf("  No data sets.");
+    return;
+  }
+  PrintList( DataList_ );
+}
+
+/** List all non-Topology/Reference data sets. */
+void DataSetList::ListDataOnly() const {
+  DataListType temp;
+  for (DataListType::const_iterator ds = DataList_.begin(); ds != DataList_.end(); ++ds)
+    if ( (*ds)->Type() != DataSet::REF_FRAME && (*ds)->Type() != DataSet::TOPOLOGY )
+      temp.push_back( *ds );
+  if (temp.empty()) return;
+  mprintf("\nDATASETS (%zu total):\n", temp.size());
+  PrintList( temp );
+}
 #ifdef MPI
 // DataSetList::SynchronizeData()
-void DataSetList::SynchronizeData() {
-  // Sync datasets - does nothing if worldsize is 1
-  for (DataListType::iterator ds = DataList_.begin(); ds != DataList_.end(); ++ds) {
-    if ( (*ds)->Sync() ) {
-      rprintf( "Error syncing dataset %s\n",(*ds)->legend());
+/** Synchronize timeseries data from child ranks to master. */
+int DataSetList::SynchronizeData(Parallel::Comm const& commIn) {
+  if (commIn.Size() < 2) return 0;
+  // Ensure that the number of sets that require sync is same on each rank.
+  // FIXME: Make sure this allgather does not end up taking too much time.
+  //        Should it be debug only?
+  std::vector<int> size_on_rank;
+  size_on_rank.reserve( DataList_.size() );
+  DataListType SetsToSync;
+  for (DataListType::iterator ds = DataList_.begin(); ds != DataList_.end(); ++ds)
+    if ( (*ds)->NeedsSync() ) {
+      SetsToSync.push_back( *ds );
+      size_on_rank.push_back( (*ds)->Size() );
+    }
+// DEBUG
+  //for (int rank = 0; rank != commIn.Size(); rank++) {
+  //  if (rank == commIn.Rank())
+  //    for (DataListType::const_iterator ds = SetsToSync.begin(); ds != SetsToSync.end(); ++ds)
+  //      rprintf("SET '%s'\n", (*ds)->legend());
+  //  commIn.Barrier();
+  //}
+// DEBUG END
+  std::vector<int> n_on_rank( commIn.Size(), 0 );
+  int nSets = (int)SetsToSync.size();
+  commIn.AllGather( &nSets, 1, MPI_INT, &n_on_rank[0] );
+  for (int rank = 1; rank < commIn.Size(); rank++)
+    if (n_on_rank[rank] != n_on_rank[0]) {
+      mprinterr("Internal Error: Number of sets to sync on rank %i (%i) != number on master %i\n",
+                rank, n_on_rank[rank], n_on_rank[0]);
+      return 1;
+    }
+  // Send all data set sizes to master.
+  std::vector<int> all_rank_sizes;
+  if (commIn.Master()) {
+    all_rank_sizes.resize( nSets * commIn.Size() );
+    commIn.GatherMaster( &size_on_rank[0], nSets, MPI_INT, &all_rank_sizes[0] );
+  } else {
+    commIn.GatherMaster( &size_on_rank[0], nSets, MPI_INT, 0 );
+  }
+  size_on_rank.clear();
+  // Call Sync only for sets that need it.
+  std::vector<int> rank_frames( commIn.Size() );
+  int total = 0; //TODO size_t?
+  int idx0 = 0;
+  for (DataListType::iterator ds = SetsToSync.begin(); ds != SetsToSync.end(); ++ds, ++idx0) {
+    if (commIn.Master()) {
+      total = all_rank_sizes[idx0];
+      rank_frames[0] = all_rank_sizes[idx0];
+      int idx1 = idx0 + nSets;
+      for (int rank = 1; rank < commIn.Size(); rank++, idx1 += nSets) {
+        total += all_rank_sizes[idx1];
+        rank_frames[rank] = all_rank_sizes[idx1];
+      }
+      //mprintf("DEBUG: Syncing '%s' (size=%zu, total=%i)\n", (*ds)->Meta().PrintName().c_str(),
+      //        (*ds)->Size(), total);
+    }
+    if ( (*ds)->Sync(total, rank_frames, commIn) ) {
+      rprintf( "Warning: Could not sync dataset '%s'\n",(*ds)->legend());
       //return;
     }
+    (*ds)->SetNeedsSync( false );
   }
+  return 0;
 }
 #endif
 // -----------------------------------------------------------------------------
@@ -597,62 +770,116 @@ void DataSetList::ListReferenceFrames() const {
   }
 }
 
+// DataSetList::ClearRef()
+void DataSetList::ClearRef() {
+  DataListType setsToKeep;
+  setsToKeep.reserve( DataList_.size() - RefList_.size() );
+  for (DataListType::const_iterator ds = DataList_.begin(); ds != DataList_.end(); ++ds)
+    if ( (*ds)->Type() != DataSet::REF_FRAME )
+      setsToKeep.push_back( *ds );
+  if (!hasCopies_)
+    for (DataListType::const_iterator ds = RefList_.begin(); ds != RefList_.end(); ++ds)
+      delete *ds;
+  RefList_.clear();
+  DataList_ = setsToKeep;
+}
+
 // -----------------------------------------------------------------------------
 const char* DataSetList::TopArgs = "parm <name> | parmindex <#>";
 
-// DataSetList::GetTopology()
-Topology* DataSetList::GetTopology(ArgList& argIn) const {
-  if (TopList_.empty()) {
-    mprinterr("Error: No topologies loaded.\n");
-    return 0;
-  }
+// DataSetList::GetTopByKeyword()
+DataSet* DataSetList::GetTopByKeyword(ArgList& argIn, int& err) const {
   DataSet* top = 0;
+  err = 0;
   std::string topname = argIn.GetStringKey("parm");
   if (!topname.empty()) {
     top = FindSetOfType( topname, DataSet::TOPOLOGY );
-    if ( top == 0 )
+    if ( top == 0 ) {
       mprinterr("Error: Topology '%s' not found.\n", topname.c_str());
+      err = 1;
+    }
   } else {
     int topindex = argIn.getKeyInt("parmindex", -1);
     if (topindex > -1 && topindex < (int)TopList_.size())
       top = TopList_[topindex];
-    if (topindex != -1 && top == 0)
+    if (topindex != -1 && top == 0) {
       mprinterr("Error: Topology index %i not found.\n", topindex);
+      err = 1;
+    }
   }
-  if (top == 0)
-    // By default return first parm if nothing else specified.
+  return top;
+}
+
+// DataSetList::GetTopology()
+/** \return Topology specified by a keyword. If no keywords are specified, the
+  *         first loaded Topology is returned. If no Topology loaded or an
+  *         error happens, 0 is returned.
+  */
+Topology* DataSetList::GetTopology(ArgList& argIn) const {
+  if (TopList_.empty()) return 0;
+  int err;
+  DataSet* top = GetTopByKeyword( argIn, err );
+  if (err) return 0;
+  if (top == 0) // By default return first parm if nothing else specified.
     top = TopList_.front();
-  if (top == 0) return 0; // Sanity check
   return ((DataSet_Topology*)top)->TopPtr();
 }
 
+const char* DataSetList::TopIdxArgs = "parm <name> | parmindex <#> | <#>";
+
 // DataSetList::GetTopByIndex()
+/** \return Topology specfied by a keyword, or if no keywords specified
+  *         the Topology specified by a single integer argument (index).
+  *         If no Topology loaded, return 0 and print error message.
+  */
 Topology* DataSetList::GetTopByIndex(ArgList& argIn) const {
   if (TopList_.empty()) {
-    mprinterr("Error: No topologies loaded.\n");
+    mprinterr("Error: No Topologies are loaded.\n");
     return 0;
   }
-  Topology* top = GetTopology( argIn );
-  if (top == 0) {
+  int err;
+  DataSet* top = GetTopByKeyword( argIn, err );
+  if (err) return 0;
+  if (top == 0) { // For backwards compat., check for single integer arg.
     int topindex = argIn.getNextInteger(-1);
     if (topindex > -1 && topindex < (int)TopList_.size())
-      top = ((DataSet_Topology*)TopList_[topindex])->TopPtr();
+      top = TopList_[topindex];
+    if (topindex != -1 && top == 0) {
+      mprinterr("Error: Topology index %i not found.\n", topindex);
+      return 0;
+    }
   }
-  if (top == 0)
-    mprinterr("Error: Could not find specified topology.\n");
-  return top;
+  if (top == 0) // By default return first parm if nothing else specified.
+    top = TopList_.front();
+  return ((DataSet_Topology*)top)->TopPtr();
 }
 
 // DataSetList::ListTopologies()
 void DataSetList::ListTopologies() const {
   if (!TopList_.empty()) {
-    mprintf("\nPARAMETER FILES:\n");
+    mprintf("\nPARAMETER FILES (%zu total):\n", TopList_.size());
     for (DataListType::const_iterator ds = TopList_.begin(); ds != TopList_.end(); ++ds)
     {
       Topology const& top = ((DataSet_Topology*)*ds)->Top();
       mprintf(" %i:", top.Pindex());
+      if ( (*ds)->Meta().Name() != (*ds)->Meta().Fname().Base() )
+        mprintf(" %s", (*ds)->Meta().Name().c_str());
       top.Brief(0);
       mprintf("\n");
     }
   }
+}
+
+// DataSetList::ClearTop()
+void DataSetList::ClearTop() {
+  DataListType setsToKeep;
+  setsToKeep.reserve( DataList_.size() - TopList_.size() );
+  for (DataListType::const_iterator ds = DataList_.begin(); ds != DataList_.end(); ++ds)
+    if ( (*ds)->Type() != DataSet::TOPOLOGY )
+      setsToKeep.push_back( *ds );
+  if (!hasCopies_)
+    for (DataListType::const_iterator ds = TopList_.begin(); ds != TopList_.end(); ++ds)
+      delete *ds;
+  TopList_.clear();
+  DataList_ = setsToKeep;
 }

@@ -3,7 +3,6 @@
 #include "Atom.h"
 #include "AtomMask.h"
 #include "CoordinateInfo.h"
-// Class: Frame
 /// Hold coordinates, perform various operations/transformations on them.
 /** Intended to hold coordinates e.g. from a trajectory or reference frame,
   * along with box coordinates (used in imaging calculations), mass information,
@@ -30,7 +29,6 @@
   */
 class Frame {
   public:
-    static void PrintCoordInfo( const char*, const char*, CoordinateInfo const&);
     // Construction/Destruction/Assignment
     Frame();
     ~Frame();
@@ -72,6 +70,7 @@ class Frame {
     const double& operator[](int idx) const { return X_[idx];        }
     bool empty()                      const { return (natom_ == 0);  }
     bool HasVelocity()                const { return (V_ != 0);      }
+    bool HasForce()                   const { return (F_ != 0);      }
     int Natom()                       const { return natom_;         }
     int size()                        const { return ncoord_;        }
     int NrepDims()                    const { return (int)remd_indices_.size(); } // TODO: deprecate
@@ -83,6 +82,8 @@ class Frame {
     const double* CRD(int idx)        const { return X_ + idx;       }
     /// \return pointer to start of velocity XYZ for given atom.
     const double* VXYZ(int atnum)     const { return V_ + (atnum*3); }
+    /// \return pointer to start of force XYZ for given atom.
+    const double* FXYZ(int atnum)     const { return F_ + (atnum*3); }
     /// \return mass of specified atom.
     double Mass(int atnum)            const { return Mass_[atnum];   }
     /// \return Box information
@@ -102,12 +103,14 @@ class Frame {
     // ----- Access to internal data pointers ----
     inline double* xAddress() { return X_;                }
     inline double* vAddress() { return V_;                }
+    inline double* fAddress() { return F_;                }
     inline double* bAddress() { return box_.boxPtr();     }
     inline double* tAddress() { return &T_;               }
     inline double* mAddress() { return &time_;            }
     inline int* iAddress()    { return &remd_indices_[0]; }
     inline const double* xAddress() const { return X_;                }
     inline const double* vAddress() const { return V_;                }
+    inline const double* fAddress() const { return F_;                }
     inline const double* bAddress() const { return box_.boxPtr();     }
     inline const double* tAddress() const { return &T_;               }
     inline const double* mAddress() const { return &time_;            }
@@ -128,6 +131,8 @@ class Frame {
     void SetCoordinates(Frame const&, AtomMask const&);
     /// Copy only coordinates from input frame to this frame.
     void SetCoordinates(Frame const&);
+    /// Copy only coordinates and box info from input frame to this frame.
+    void SetCoordAndBox(Frame const&);
     /// Set coordinates from external memory.
     int SetCoordinates(int, double*);
     /// Copy entire input frame according to mask.
@@ -185,6 +190,8 @@ class Frame {
     void Scale(AtomMask const&, double, double, double);
     /// Translate atoms to origin.
     Vec3 CenterOnOrigin(bool);
+    // Align on reference
+    void Align(Frame const&, AtomMask const&);
     // Coordinate calculation
     double RMSD(Frame &, bool );
     double RMSD(Frame &, Matrix_3x3&, Vec3&, Vec3&, bool);
@@ -195,14 +202,17 @@ class Frame {
     double DISTRMSD( Frame const& ) const;
     /// Set axis of rotation to be around line connecting given atoms.
     Vec3 SetAxisOfRotation(int, int);
+    /// Set axis of rotation to be around line connecting given points.
+    Vec3 SetAxisOfRotation(Vec3 const&, Vec3 const&);
     /// Calculate inertia matrix.
     Vec3 CalculateInertia(AtomMask const&, Matrix_3x3&) const;
     /// Calculate temperature of atoms in mask.
     double CalcTemperature(AtomMask const&,int) const;
 #   ifdef MPI
     // ----- Parallel Routines -------------------
-    int SendFrame(int);
-    int RecvFrame(int);
+    int SendFrame(int, Parallel::Comm const&);
+    int RecvFrame(int, Parallel::Comm const&);
+    int SumToMaster(Parallel::Comm const&);
 #   endif
   private:
     typedef std::vector<double> Darray;
@@ -217,6 +227,7 @@ class Frame {
     double time_;   ///< Time FIXME Should this be float?
     double* X_;     ///< Coord array, X0 Y0 Z0 X1 Y1 Z1 ...
     double* V_;     ///< Velocities (same arrangement as Coords).
+    double* F_;     ///< Frame (same arrangement as Coords).
     RemdIdxType remd_indices_; ///< replica indices.
     Darray Mass_;   ///< Masses.
     bool memIsExternal_; ///< True if Frame is not responsible for freeing memory.

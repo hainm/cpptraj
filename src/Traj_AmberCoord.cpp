@@ -163,41 +163,48 @@ int Traj_AmberCoord::setupTrajin(FileName const& fname, Topology* trajParm)
     return TRAJIN_ERR;
   }
   // Check for box coordinates. If present, update the frame size and
-  // reallocate the frame buffer.
+  // reallocate the frame buffer. If less than 3 atoms there is no way
+  // to tell if a line is a box line or coordinates, so skip.
   Box boxInfo;
-  std::string nextLine = file_.GetLine();
-  if ( !nextLine.empty() ) {
-    if (debug_>0) rprintf("DEBUG: Line after first frame: (%s)\n", nextLine.c_str());
-    if ( IsRemdHeader(nextLine.c_str()) || IsRxsgldHeader(nextLine.c_str()) ) {
-      // REMD header - no box coords
-      numBoxCoords_ = 0;
-    } else {
-      double box[8];
-      numBoxCoords_ = sscanf(nextLine.c_str(), "%8lf%8lf%8lf%8lf%8lf%8lf%8lf%8lf",
-                             box, box+1, box+2, box+3, box+4, box+5, box+6, box+7);
-      if (numBoxCoords_ == -1) {
-        mprinterr("Error: Could not read Box coord line of trajectory %s.",file_.Filename().base());
-        return TRAJIN_ERR;
-      } else if (numBoxCoords_ == 8) {
-        // Full line of coords was read, no box coords.
+  if ( trajParm->Natom() < 3 ) {
+    mprintf("Warning: Less than 3 atoms, skipping box check.\n");
+    numBoxCoords_ = 0;
+  } else {
+    std::string nextLine = file_.GetLine();
+    if ( !nextLine.empty() ) {
+      if (debug_>0) rprintf("DEBUG: Line after first frame: (%s)\n", nextLine.c_str());
+      if ( IsRemdHeader(nextLine.c_str()) || IsRxsgldHeader(nextLine.c_str()) ) {
+        // REMD header - no box coords
         numBoxCoords_ = 0;
-      } else if (numBoxCoords_ == 3) {
-        // Box lengths only, ortho. or truncated oct. Use default parm angles.
-        if (trajParm->ParmBox().Type() == Box::NOBOX)
-          mprintf("Warning: Trajectory only contains box lengths and topology has no box info.\n"
-                  "Warning: To set box angles for topology use the 'parmbox' command.\n");
-        box[3] = boxAngle_[0] = trajParm->ParmBox().Alpha();
-        box[4] = boxAngle_[1] = trajParm->ParmBox().Beta();
-        box[5] = boxAngle_[2] = trajParm->ParmBox().Gamma();
-        boxInfo.SetBox( box );
-      } else if (numBoxCoords_ == 6) {
-        // General triclinic. Set lengths and angles.
-        boxInfo.SetBox( box );
       } else {
-        mprinterr("Error: In %s, expect only 3 or 6 box coords, got %i\n" 
-                  "Error:   Box line=[%s]\n", 
-                  file_.Filename().base(), numBoxCoords_, nextLine.c_str());
-        return TRAJIN_ERR;
+        double box[8];
+        numBoxCoords_ = sscanf(nextLine.c_str(), "%8lf%8lf%8lf%8lf%8lf%8lf%8lf%8lf",
+                               box, box+1, box+2, box+3, box+4, box+5, box+6, box+7);
+        if (numBoxCoords_ == -1) {
+          mprinterr("Error: Could not read Box coord line of trajectory %s.\n",
+                   file_.Filename().base());
+          return TRAJIN_ERR;
+        } else if (numBoxCoords_ == 8) {
+          // Full line of coords was read, no box coords.
+          numBoxCoords_ = 0;
+        } else if (numBoxCoords_ == 3) {
+          // Box lengths only, ortho. or truncated oct. Use default parm angles.
+          if (trajParm->ParmBox().Type() == Box::NOBOX)
+            mprintf("Warning: Trajectory only contains box lengths and topology has no box info.\n"
+                    "Warning: To set box angles for topology use the 'parmbox' command.\n");
+          box[3] = boxAngle_[0] = trajParm->ParmBox().Alpha();
+          box[4] = boxAngle_[1] = trajParm->ParmBox().Beta();
+          box[5] = boxAngle_[2] = trajParm->ParmBox().Gamma();
+          boxInfo.SetBox( box );
+        } else if (numBoxCoords_ == 6) {
+          // General triclinic. Set lengths and angles.
+          boxInfo.SetBox( box );
+        } else {
+          mprinterr("Error: In %s, expect only 3 or 6 box coords, got %i\n"
+                    "Error:   Box line=[%s]\n",
+                    file_.Filename().base(), numBoxCoords_, nextLine.c_str());
+          return TRAJIN_ERR;
+        }
       }
     }
     // Reallocate frame buffer accordingly
@@ -290,7 +297,7 @@ int Traj_AmberCoord::setupTrajin(FileName const& fname, Topology* trajParm)
 }
 
 void Traj_AmberCoord::WriteHelp() {
-  mprintf("\tremdtraj:      Write temperature to trajectory (makes REMD trajectory).\n"
+  mprintf("\tremdtraj     : Write temperature to trajectory (makes REMD trajectory).\n"
           "\thighprecision: (ADVANCED USE ONLY) Write 8.6 instead of 8.3 format.\n");
 }
 
@@ -330,6 +337,7 @@ int Traj_AmberCoord::setupTrajout(FileName const& fname, Topology* trajParm,
       // Set up default title
       title.assign("Cpptraj Generated trajectory");
       title.resize(80,' ');
+      SetTitle( title );
     } else {
       // Check title length
       if (title.size() > 80) {
@@ -373,3 +381,89 @@ void Traj_AmberCoord::Info() {
     mprintf("is an AMBER trajectory");
   if (highPrecision_) mprintf(" (high precision)");
 }
+#ifdef MPI
+// =============================================================================
+int Traj_AmberCoord::parallelOpenTrajin(Parallel::Comm const& commIn) {
+  mprinterr("Error: Parallel read not supported for Amber ASCII coords.\n");
+  return 1;
+}
+
+/** This assumes file has been previously set up with parallelSetupTrajout
+  * and title has been written, so open append.
+  */
+int Traj_AmberCoord::parallelOpenTrajout(Parallel::Comm const& commIn) {
+  return (file_.ParallelOpenFile( CpptrajFile::APPEND, commIn ));
+}
+
+/** First master performs all necessary setup, then sends info to all children.
+  */
+int Traj_AmberCoord::parallelSetupTrajout(FileName const& fname, Topology* trajParm,
+                                           CoordinateInfo const& cInfoIn,
+                                           int NframesToWrite, bool append,
+                                           Parallel::Comm const& commIn)
+{
+  int err = 0;
+  // In parallel MUST know # of frames to write in order to correctly set size
+  if (NframesToWrite < 1) {
+    mprinterr("Error: # frames to write must be known for Amber Coords output in parallel.\n");
+    err = 1;
+  } else if (commIn.Master()) {
+    // NOTE: This writes the title.
+    err = setupTrajout(fname, trajParm, cInfoIn, NframesToWrite, append);
+    // NOTE: setupTrajout leaves file open. Should this change?
+    file_.CloseFile();
+  }
+  commIn.MasterBcast(&err, 1, MPI_INT);
+  if (err != 0) return 1;
+  // Synchronize info on non-master threads.
+  SyncTrajIO( commIn );
+  // TODO For simplicity convert everything to double. Is this just lazy?
+  double tmpArray[8];
+  if (commIn.Master()) {
+    tmpArray[0] = (double)natom3_;
+    tmpArray[1] = (double)headerSize_;
+    tmpArray[2] = (double)tStart_;
+    tmpArray[3] = (double)tEnd_;
+    tmpArray[4] = (double)numBoxCoords_;
+    tmpArray[5] = boxAngle_[0];
+    tmpArray[6] = boxAngle_[1];
+    tmpArray[7] = boxAngle_[2];
+    commIn.MasterBcast(tmpArray, 8, MPI_DOUBLE);
+  } else {
+    commIn.MasterBcast(tmpArray, 8, MPI_DOUBLE);
+    natom3_       = (int)tmpArray[0];
+    headerSize_   = (size_t)tmpArray[1];
+    tStart_       = (size_t)tmpArray[2];
+    tEnd_         = (size_t)tmpArray[3];
+    numBoxCoords_ = (int)tmpArray[4];
+    boxAngle_[0]  = tmpArray[5];
+    boxAngle_[1]  = tmpArray[6];
+    boxAngle_[2]  = tmpArray[7];
+    if (append)
+      file_.SetupAppend( fname, debug_ );
+    else
+      file_.SetupWrite( fname, debug_ );
+  }
+  // For parallel output we will need to seek. Set up the buffer again with correct offsets.
+  // Figure out the size of the written title.
+  unsigned int titleSize = (unsigned int)Title().size() + 1; // +1 for newline
+  titleSize = std::min(81U, titleSize);
+  file_.SetupFrameBuffer( natom3_, 8, 10, headerSize_, titleSize );
+  file_.ResizeBuffer( numBoxCoords_ );
+  if (debug_>0)
+    rprintf("'%s'(Parallel): Each frame has %lu bytes.\n", file_.Filename().base(),
+            file_.FrameSize());
+  // TODO set file size
+  return 0;
+}
+
+int Traj_AmberCoord::parallelReadFrame(int set, Frame& frameIn) { return 1; }
+
+int Traj_AmberCoord::parallelWriteFrame(int set, Frame const& frameOut) {
+  // Seek to given frame.
+  file_.SeekToFrame( set );
+  return ( writeFrame(set, frameOut) );
+}
+
+void Traj_AmberCoord::parallelCloseTraj() { closeTraj(); }
+#endif

@@ -5,15 +5,15 @@
 class Action_Center: public Action {
   public:
     Action_Center();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_Center(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_Center(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
     Action::RetType DoAction(int, ActionFrame&);
     void Print() {}
 
-    enum CenterMode { ORIGIN = 0, BOXCTR, POINT };
+    enum CenterMode { ORIGIN = 0, BOXCTR, REF, POINT };
     AtomMask Mask_;
     CenterMode centerMode_;
     bool useMass_;

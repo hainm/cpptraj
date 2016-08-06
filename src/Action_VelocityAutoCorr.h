@@ -5,12 +5,18 @@
 class Action_VelocityAutoCorr : public Action {
   public:
     Action_VelocityAutoCorr();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_VelocityAutoCorr(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_VelocityAutoCorr(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
     Action::RetType DoAction(int, ActionFrame&);
+#   ifdef MPI
+    int ParallelPreviousFramesRequired() const { return 1; }
+    int ParallelPreloadFrames(FArray const&);
+    int SyncAction();
+    Parallel::Comm trajComm_;
+#   endif
     void Print();
 
     bool useVelInfo_;     ///< If true use actual velocities in frame if present

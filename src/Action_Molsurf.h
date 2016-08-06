@@ -14,8 +14,8 @@
 class Action_Molsurf: public Action {
   public:
     Action_Molsurf();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_Molsurf(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_Molsurf(); }
+    void Help() const;
     ~Action_Molsurf();
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
@@ -23,6 +23,10 @@ class Action_Molsurf: public Action {
     Action::RetType DoAction(int, ActionFrame&);
     void Print() {}
 
+    int debug_;
+    static const char* MODE_[];
+    enum Radii_Mode { GB = 0, PARSE, VDW };
+    Radii_Mode radiiMode_; ///< Radii to use
     DataSet* sasa_;
     AtomMask Mask1_;
     ATOM* atom_;

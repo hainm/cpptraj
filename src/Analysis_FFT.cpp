@@ -6,19 +6,19 @@
 // CONSTRUCTOR
 Analysis_FFT::Analysis_FFT() : dt_(0.0) {}
 
-void Analysis_FFT::Help() {
+void Analysis_FFT::Help() const {
   mprintf("\t<dset0> [<dset1> ...] [out <outfile>] [name <outsetname>] [dt <samp_int>]\n"
           "  Perform forward fast-Fourier transformation of data set(s)\n");
 }
 
 // Analysis_FFT::Setup()
-Analysis::RetType Analysis_FFT::Setup(ArgList& analyzeArgs, DataSetList* datasetlist, DataFileList* DFLin, int debugIn)
+Analysis::RetType Analysis_FFT::Setup(ArgList& analyzeArgs, AnalysisSetup& setup, int debugIn)
 {
   std::string setname = analyzeArgs.GetStringKey("name");
-  DataFile* outfile = DFLin->AddDataFile(analyzeArgs.GetStringKey("out"), analyzeArgs);
+  DataFile* outfile = setup.DFL().AddDataFile(analyzeArgs.GetStringKey("out"), analyzeArgs);
   dt_ = analyzeArgs.getKeyDouble("dt",1.0);
   // Select datasets from remaining args
-  if (input_dsets_.AddSetsFromArgs( analyzeArgs.RemainingArgs(), *datasetlist )) {
+  if (input_dsets_.AddSetsFromArgs( analyzeArgs.RemainingArgs(), setup.DSL() )) {
     mprinterr("Error: Could not add data sets.\n");
     return Analysis::ERR;
   }
@@ -28,7 +28,7 @@ Analysis::RetType Analysis_FFT::Setup(ArgList& analyzeArgs, DataSetList* dataset
   }
   // If setname is empty generate a default name
   if (setname.empty())
-    setname = datasetlist->GenerateDefaultName( "FFT" );
+    setname = setup.DSL().GenerateDefaultName( "FFT" );
   // Setup output datasets.
   int idx = 0;
   if ( input_dsets_.size() == 1 )
@@ -36,7 +36,7 @@ Analysis::RetType Analysis_FFT::Setup(ArgList& analyzeArgs, DataSetList* dataset
   for ( Array1D::const_iterator DS = input_dsets_.begin(); 
                                 DS != input_dsets_.end(); ++DS) 
   {
-    DataSet* dsout = datasetlist->AddSet( DataSet::DOUBLE, MetaData(setname, idx++) );
+    DataSet* dsout = setup.DSL().AddSet( DataSet::DOUBLE, MetaData(setname, idx++) );
     if (dsout==0) return Analysis::ERR;
     dsout->SetLegend( (*DS)->Meta().Legend() );
     output_dsets_.push_back( (DataSet_1D*)dsout );
@@ -91,7 +91,7 @@ Analysis::RetType Analysis_FFT::Analyze() {
   double fnyquist = sr / 2.0;         // Nyquist frequency
   double total_time = dt_ * (double)maxsize_; // Total time (fundamental period)
   double f0 = 1.0 / total_time;       // Fundamental frequency (first harmonic)
-  Dimension Xdim(0.0, f0, maxsize_, "Freq.");
+  Dimension Xdim(0.0, f0, "Freq.");
   mprintf("\tReporting FFT magnitude, normalized by N/2.\n"
           "\tOnly data up to the Nyquist frequency will be used.\n");
   mprintf("\tSampling rate= %f ps^-1, Nyquist freq.= %f ps^-1\n", sr, fnyquist);

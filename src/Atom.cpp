@@ -55,7 +55,25 @@ const double Atom::AtomicElementMass[NUMELEMENTS] = { 1.0,
   180.94788,  204.3833,    50.9415,    183.84,     131.293,    91.224,
    88.90585,  174.9668,
     0.0
-};  
+};
+
+/** Values taken from parm10.dat and ion frcmod files as the average Rmin/2
+  * parameter for that element type. (HO types ignored in average, since
+  * they are 0). Unknown values set to 1.00
+  *
+  * Silicon radius taken from http://www.chem.hope.edu/~krieg/shorb/ (2.419)
+  */
+const double Atom::AtomicElementRadius[NUMELEMENTS] = { 1.0,
+  1.212, 1.000, 1.908, 1.824, 1.724, 1.750, 2.100, 2.000, 1.948, 2.220,
+  1.353, 1.649, 2.860, 1.360, 1.218, 1.025, 1.705, 1.813, 1.976, 1.271,
+  1.369, 1.297, 1.000, 1.000, 1.500, 1.000, 1.000, 0.956, 2.019, 1.000,
+  1.344, 1.299, 1.412, 1.000, 1.000, 1.000, 1.000, 1.000, 1.407, 1.000,
+  1.000, 1.000, 1.407, 1.000, 1.000, 1.255, 1.000, 1.000, 1.303, 1.266,
+  1.745, 1.000, 1.000, 1.000, 1.000, 1.000, 2.019, 2.419, 1.000, 1.000,
+  1.000, 1.666, 1.000, 1.000, 1.000, 1.000, 1.000, 1.000, 1.000, 1.000,
+  1.000, 1.000, 1.000,
+  0.000 /* extra point has no radius */
+};
 
 // CONSTRUCTOR
 Atom::Atom() : charge_(0.0), polar_(0.0), mass_(1.0), gb_radius_(0.0),
@@ -69,7 +87,7 @@ Atom::Atom(NameType const& aname, const char* elt) :
   aname_(aname), atype_(""), atype_index_(0), element_(UNKNOWN_ELEMENT),
   resnum_(0), mol_(0)
 {
-  if (elt ==0 || (elt[0]==' ' && elt[1]==' '))
+  if (elt == 0 || (!isalpha(elt[0]) && !isalpha(elt[1])))
     SetElementFromName();
   else
     SetElementFromSymbol(elt[0], elt[1]);
@@ -265,14 +283,14 @@ void Atom::SetElementFromSymbol(char c1, char c2) {
   // Attempt to match up 1 or 2 char element name
   char en[2];
   bool oneChar = true;
-  if (c1 != ' ' && c2 != ' ') {
+  if (isalpha(c1) && isalpha(c2)) {
     en[0] = toupper(c1);
     en[1] = toupper(c2);
     oneChar = false;
-  } else if (c2 != ' ') {
+  } else if (isalpha(c2)) {
     en[0] = toupper(c2);
     en[1] = ' ';
-  } else if (c1 != ' ') {
+  } else if (isalpha(c1)) {
     en[0] = toupper(c1);
     en[1] = ' ';
   } else

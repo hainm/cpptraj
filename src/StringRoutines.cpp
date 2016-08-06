@@ -1,7 +1,7 @@
 #include <cmath>     // log10
+#include <cctype>    // isspace, isdigit
 #include <ctime>     // for TimeString()
 #include <sstream>   // istringstream, ostringstream
-#include <locale>    // isspace
 #include <stdexcept> // BadConversion
 #include "StringRoutines.h"
 #include "CpptrajStdio.h"
@@ -107,7 +107,8 @@ public:
 int convertToInteger(std::string const &s) {
   std::istringstream iss(s);
   long int i;
-  if (!(iss >> i))
+  iss >> i;
+  if (iss.fail())
     throw BadConversion("convertToInteger(\"" + s + "\")");
   return (int)i;
 }
@@ -117,7 +118,8 @@ int convertToInteger(std::string const &s) {
 double convertToDouble(std::string const &s) {
   std::istringstream iss(s);
   double d;
-  if (!(iss >> d))
+  iss >> d;
+  if (iss.fail())
     throw BadConversion("convertToDouble(\"" + s + "\")");
   return d;
 }
@@ -126,9 +128,8 @@ double convertToDouble(std::string const &s) {
 /// Remove any trailing whitespace from string.
 void RemoveTrailingWhitespace(std::string &line) {
   if (line.empty()) return;
-  std::locale loc;
   int p = (int)line.size() - 1;
-  while (p > -1 && (isspace(line[p],loc) || line[p]=='\n' || line[p]=='\r'))
+  while (p > -1 && (isspace(line[p]) || line[p]=='\n' || line[p]=='\r'))
     --p;
   line.resize(p + 1);
 }
@@ -137,6 +138,28 @@ std::string NoTrailingWhitespace(std::string const& line) {
   std::string duplicate(line);
   RemoveTrailingWhitespace(duplicate);
   return duplicate;
+}
+
+/// Remove all whitespace from string.
+void RemoveAllWhitespace(std::string& line) {
+  if (line.empty()) return;
+  std::string tmp( line );
+  line.clear();
+  for (std::string::const_iterator it = tmp.begin(); it != tmp.end(); ++it) {
+    if (isspace(*it) || *it == '\n' || *it == '\r') continue;
+    line += *it;
+  }
+}
+
+/// \return Given string with all whitespace removed.
+std::string NoWhitespace(std::string const& line) {
+  if (line.empty()) return std::string("");
+  std::string out;
+  for (std::string::const_iterator it = line.begin(); it != line.end(); ++it) {
+    if (isspace(*it) || *it == '\n' || *it == '\r') continue;
+    out += *it;
+  }
+  return out;
 }
 
 // integerToString()
@@ -165,39 +188,24 @@ std::string doubleToString(double d) {
 // validInteger()
 bool validInteger(std::string const &argument) {
   if (argument.empty()) return false;
-  std::locale loc;
   std::string::const_iterator c;
-  if (argument[0]=='-') {
+  if (argument[0]=='-' || argument[0]=='+') {
     c = argument.begin()+1;
     if (c == argument.end()) return false;
   } else
     c = argument.begin();
   for (; c != argument.end(); ++c)
-    if (!isdigit(*c,loc)) return false;
+    if (!isdigit(*c)) return false;
   return true;
 }
 
 // validDouble()
-bool validDouble(std::string const &argument) {
+bool validDouble(std::string const& argument) {
   if (argument.empty()) return false;
-  std::locale loc;
-  std::string::const_iterator c;
-  bool hasDecPt = (argument[0]=='.');
-  if (argument[0]=='-' || hasDecPt) {
-    c = argument.begin()+1;
-    if (c == argument.end()) return false;
-  } else
-    c = argument.begin();
-  if (!isdigit(*c,loc)) return false;
-  for (; c != argument.end(); ++c)
-  {
-    if (*c == 'e' || *c == 'E')
-      return validInteger( argument.substr(c - argument.begin() + 1) );
-    bool isDecPt = (*c == '.');
-    if (!isdigit(*c,loc) && (!isDecPt || (hasDecPt && isDecPt))) return false;
-    if (isDecPt) hasDecPt = true;
-  }
-  return true;
+  std::istringstream iss(argument);
+  double val;
+  iss >> val;
+  return !(iss.fail());
 }
 
 // -----------------------------------------------------------------------------
@@ -230,7 +238,43 @@ std::string TimeString() {
 }
 
 // -----------------------------------------------------------------------------
-long long AvailableMemory() {
+std::string ByteString(unsigned long long sizeInBytes, ByteType bt) {
+  static const char* BytePrefix[] = { " kB", " MB", " GB", " TB", " PB", " EB" };
+  unsigned int idx = 0;    // Index into BytePrefix
+  unsigned long long base; // Base of the size classes
+  if (bt == BYTE_BINARY)
+    base = 1024UL; // BINARY
+  else
+    base = 1000UL; // DECIMAL
+  unsigned long long den = base;        // Number to divide input size by; matches idx
+  unsigned long long cut = base * base; // Next size class
+  while (sizeInBytes >= cut) {
+    ++idx;
+    den *= base;
+    if (idx == 5) break; // NOTE: Must be max value of BytePrefix array.
+    cut *= base;
+  }
+  double newSize = (double)sizeInBytes / (double)den;
+  std::ostringstream oss;
+  oss.setf( std::ios::fixed, std::ios::floatfield );
+  oss.precision(3);
+  oss << newSize;
+  return oss.str() + std::string( BytePrefix[idx] );
+}
+
+// -----------------------------------------------------------------------------
+#ifdef __APPLE__
+static long long TotalGlobalMemory() {
+    int mib[] = {CTL_HW, HW_MEMSIZE};
+    int64_t size = 0;
+    size_t len = sizeof(size);
+    if (sysctl(mib, 2, &size, &len, NULL, 0) == 0)
+        return (long long) size;
+    return 0ll;
+}
+#endif
+
+static long long AvailableMemory() {
 #ifdef _MSC_VER
   MEMORYSTATUS status;
   GlobalMemoryStatus(&status);
@@ -258,21 +302,10 @@ long long AvailableMemory() {
 #endif
 }
 
-double AvailableMemory_MB() { 
-  double avail_in_bytes = AvailableMemory();
-  if (avail_in_bytes < 0.0) 
-    return -1.0;
+std::string AvailableMemoryStr() {
+  long long avail_in_bytes = AvailableMemory();
+  if (avail_in_bytes < 0)
+    return std::string("");
   else
-    return (double)AvailableMemory() / (1024 * 1024);
+    return ByteString(avail_in_bytes, BYTE_DECIMAL);
 }
-
-#ifdef __APPLE__
-long long TotalGlobalMemory() {
-    int mib[] = {CTL_HW, HW_MEMSIZE};
-    int64_t size = 0;
-    size_t len = sizeof(size);
-    if (sysctl(mib, 2, &size, &len, NULL, 0) == 0)
-        return (long long) size;
-    return 0ll;
-}
-#endif

@@ -7,6 +7,9 @@
 #include "AssociatedData.h"
 #include "TextFormat.h"
 #include "CpptrajFile.h"
+#ifdef MPI
+# include "Parallel.h"
+#endif
 /// Base class that all DataSet types will inherit.
 /** The DataSet base class holds common information, like MetaData for
   * selection, TextFormat for text output, etc.
@@ -23,11 +26,11 @@ class DataSet {
     enum DataType {
       UNKNOWN_DATA=0, DOUBLE, FLOAT, INTEGER, STRING, MATRIX_DBL, MATRIX_FLT, 
       COORDS, VECTOR, MODES, GRID_FLT, REMLOG, XYMESH, TRAJ, REF_FRAME,
-      MAT3X3, TOPOLOGY
+      MAT3X3, TOPOLOGY, CMATRIX, CMATRIX_NOMEM, CMATRIX_DISK
     };
     /// Group DataSet belongs to.
     enum DataGroup {
-      GENERIC=0, SCALAR_1D, MATRIX_2D, GRID_3D, COORDINATES
+      GENERIC=0, SCALAR_1D, MATRIX_2D, GRID_3D, COORDINATES, CLUSTERMATRIX
     };
 
     DataSet();
@@ -39,8 +42,6 @@ class DataSet {
     // ----------===== Inheritable functions =====----------
     /// \return the number of data elements stored in the DataSet.
     virtual size_t Size() const = 0;
-    /// Consolidate this DataSet across all threads (MPI only)
-    virtual int Sync() = 0;
     /// Print DataSet information //TODO return string instead?
     virtual void Info() const = 0;
     /// Write data to file given start indices. FIXME Buffer? Should this function take number of elements as well?
@@ -61,6 +62,10 @@ class DataSet {
     /// Can be used to append given data set to this one.
     virtual int Append(DataSet*) = 0;
     // TODO SizeInMB?
+#   ifdef MPI
+    /// Consolidate this DataSet across all threads (MPI only)
+    virtual int Sync(size_t, std::vector<int> const&, Parallel::Comm const&) = 0;
+#   endif
     // -----------------------------------------------------
     /// Associate additional data with this set.
     void AssociateData(AssociatedData* a) { associatedData_.push_back( a->Copy() ); }
@@ -73,7 +78,12 @@ class DataSet {
     /// Set specific TextFormat part.
     TextFormat& SetupFormat() { return format_; }
     /// Set specified DataSet dimension.
-    void SetDim(Dimension::DimIdxType i, Dimension const& d) { dim_[(int)i]=d; }
+    void SetDim(Dimension::DimIdxType i, Dimension const& d) { dim_[(int)i] = d; }
+    void SetDim(int i, Dimension const& d)                   { dim_[i] = d;      }
+#   ifdef MPI
+    void SetNeedsSync(bool b) { needsSync_ = b;  }
+    bool NeedsSync() const    { return needsSync_;  }
+#   endif
     /// Check if name and/or index and aspect wildcard match this DataSet.
     bool Matches_WC(MetaData::SearchString const&, DataType) const;
     /// \return AssociateData of specified type.
@@ -96,9 +106,8 @@ class DataSet {
     /// \return number of dimensions.
     size_t Ndim()               const { return dim_.size();        }
     /// \return specified DataSet dimension. // TODO consolidate
-    Dimension& Dim(Dimension::DimIdxType i) { return dim_[(int)i]; }
-    Dimension&       Dim(int i)             { return dim_[i];      }
-    Dimension const& Dim(int i)       const { return dim_[i];      }
+    Dimension& ModifyDim(Dimension::DimIdxType i) { return dim_[(int)i]; }
+    Dimension const& Dim(int i)             const { return dim_[i];      }
 
     /// Comparison for sorting, name/aspect/idx
     inline bool operator<(const DataSet& rhs) const { return meta_ < rhs.meta_; }
@@ -121,5 +130,8 @@ class DataSet {
     DataType dType_;            ///< The DataSet type
     DataGroup dGroup_;          ///< The DataSet group
     MetaData meta_;             ///< DataSet metadata
+#   ifdef MPI
+    bool needsSync_;            ///< True if DataSet needs sync. Should only be true once after run
+#   endif
 };
 #endif 

@@ -19,7 +19,7 @@ Action_ClusterDihedral::Action_ClusterDihedral() :
   debug_(0)
 {}
 
-void Action_ClusterDihedral::Help() {
+void Action_ClusterDihedral::Help() const {
   mprintf("\t[phibins <N>] [psibins <M>] [out <outfile>]\n"
           "\t[framefile <framefile>] [clusterinfo <infofile>]\n"
           "\t[clustervtime <cvtfile>] [cut <CUT>]\n"
@@ -60,6 +60,13 @@ int Action_ClusterDihedral::ReadDihedrals(std::string const& fname) {
 // Action_ClusterDihedral::Init()
 Action::RetType Action_ClusterDihedral::Init(ArgList& actionArgs, ActionInit& init, int debugIn)
 {
+# ifdef MPI
+  if (init.TrajComm().Size() > 1) {
+    mprinterr("Error: 'clusterdihedral' not supported with > 1 thread (%i threads currently)\n",
+              init.TrajComm().Size());
+    return Action::ERR;
+  }
+# endif
   debug_ = debugIn;
   // # of phi and psi bins
   phibins_ = actionArgs.getKeyInt("phibins", 10);

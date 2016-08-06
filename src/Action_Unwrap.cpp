@@ -10,7 +10,7 @@ Action_Unwrap::Action_Unwrap() :
   center_(false)
 { }
 
-void Action_Unwrap::Help() {
+void Action_Unwrap::Help() const {
   mprintf("\t[center] [{bymol | byres | byatom}]\n"
           "\t[ %s ] [<mask>]\n", DataSetList::RefArgs);
   mprintf("  Reverse of 'image'; unwrap coordinates in <mask> according\n"
@@ -20,6 +20,13 @@ void Action_Unwrap::Help() {
 // Action_Unwrap::Init()
 Action::RetType Action_Unwrap::Init(ArgList& actionArgs, ActionInit& init, int debugIn)
 {
+# ifdef MPI
+  if (init.TrajComm().Size() > 1) {
+    mprinterr("Error: 'unwrap' action does not work with > 1 thread (%i threads currently).\n",
+              init.TrajComm().Size());
+    return Action::ERR;
+  }
+# endif
   // Get Keywords
   center_ = actionArgs.hasKey("center");
   if (actionArgs.hasKey("bymol"))
@@ -103,8 +110,8 @@ Action::RetType Action_Unwrap::Setup(ActionSetup& setup) {
 // Action_Unwrap::DoAction()
 Action::RetType Action_Unwrap::DoAction(int frameNum, ActionFrame& frm) {
   Matrix_3x3 ucell, recip;
-  // Set reference structure if not already set
   if (RefFrame_.empty()) {
+    // Set reference structure if not already set
     RefFrame_ = frm.Frm();
     return Action::OK;
   }

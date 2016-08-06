@@ -7,8 +7,8 @@
 class Action_NMRrst: public Action {
   public:
     Action_NMRrst();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_NMRrst(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_NMRrst(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
@@ -74,6 +74,8 @@ class Action_NMRrst: public Action {
     bool useMass_;
     bool findNOEs_;
     bool series_; ///< If true save NOE distance data.
+    Topology* rsttop_;
+    std::string viewrst_;
 };
 // ----- Associated Classes ----------------------------------------------------
 /// Potential NOE site.

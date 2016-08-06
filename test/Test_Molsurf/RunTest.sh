@@ -3,13 +3,14 @@
 . ../MasterTest.sh
 
 CleanFiles molsurf.in msurf.dat
-
+CheckNetcdf
 # Molsurf test
 cat > molsurf.in <<EOF
 parm ../tz2.parm7
 trajin ../tz2.nc 1 10
-molsurf M1 out msurf.dat
-#trajout pqr pdb dumpq multi
+molsurf GB    out msurf.dat
+molsurf PARSE out msurf.dat radii parse
+molsurf VDW   out msurf.dat radii vdw
 EOF
 INPUT="-i molsurf.in"
 RunCpptraj "Molsurf test."

@@ -12,7 +12,7 @@ Action_Principal::Action_Principal() :
   valData_(0)
 { }
 
-void Action_Principal::Help() {
+void Action_Principal::Help() const {
   mprintf("\t[<mask>] [dorotation] [out <filename>] [name <dsname>]\n"
           "  Calculate principal axes of atoms in <mask>. Align the system along\n"
           "  principal axes if 'dorotation' specified.\n");
@@ -43,6 +43,12 @@ Action::RetType Action_Principal::Init(ArgList& actionArgs, ActionInit& init, in
 
   mprintf("    PRINCIPAL:");
   if (!filename.empty()) {
+#   ifdef MPI
+    if (init.TrajComm().Size() > 1) {
+      mprinterr("Error: 'out' keyword not supported in parallel.\n");
+      return Action::ERR;
+    }
+#   endif
     outfile_ = init.DFL().AddCpptrajFile(filename, "Eigenvectors/Eigenvalues");
     if (outfile_ == 0) return Action::ERR;
     mprintf(" output eigenvectors/eigenvalues to %s,", outfile_->Filename().full());

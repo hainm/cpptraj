@@ -38,6 +38,32 @@ void DataSet_Mesh::WriteBuffer(CpptrajFile &cbuffer, SizeArray const& pIn) const
   else
     cbuffer.Printf(format_.fmt(), mesh_y_[pIn[0]]);
 }
+#ifdef MPI
+// DataSet_double::Sync()
+int DataSet_Mesh::Sync(size_t total, std::vector<int> const& rank_frames,
+                       Parallel::Comm const& commIn)
+{
+  if (commIn.Size()==1) return 0;
+  if (commIn.Master()) {
+    // Resize for total number of frames.
+    mesh_x_.resize( total );
+    mesh_y_.resize( total );
+    double* x_endptr = &(mesh_x_[0]) + rank_frames[0];
+    double* y_endptr = &(mesh_y_[0]) + rank_frames[0];
+    // Receive data from each rank
+    for (int rank = 1; rank < commIn.Size(); rank++) {
+      commIn.SendMaster( x_endptr, rank_frames[rank], rank, MPI_DOUBLE );
+      commIn.SendMaster( y_endptr, rank_frames[rank], rank, MPI_DOUBLE );
+      x_endptr += rank_frames[rank];
+      y_endptr += rank_frames[rank];
+    }
+  } else {// Send data to master //TODO adjust for repeated additions?
+    commIn.SendMaster( &(mesh_x_[0]), mesh_x_.size(), commIn.Rank(), MPI_DOUBLE );
+    commIn.SendMaster( &(mesh_y_[0]), mesh_y_.size(), commIn.Rank(), MPI_DOUBLE );
+  }
+  return 0;
+}
+#endif
 
 // -----------------------------------------------------------------------------
 int DataSet_Mesh::Append(DataSet* dsIn) {
@@ -67,6 +93,8 @@ void DataSet_Mesh::CalculateMeshX(int sizeIn, double ti, double tf) {
   double d = (tf - ti)/2;
   for (int i = 0; i < sizeIn; i++)
     mesh_x_[i] = s + d*((double) (2*i + 1 - sizeIn)/(sizeIn - 1));
+  // Update dimension
+  SetDim(Dimension::X, Dimension( ti, (tf - ti) / (double)(sizeIn - 1), Dim(0).Label() ));
 }
 
 // DataSet_Mesh::SetMeshXY()
@@ -77,6 +105,8 @@ int DataSet_Mesh::SetMeshXY(DataSet_1D const& dsIn) {
     mesh_x_[i] = dsIn.Xcrd(i);
     mesh_y_[i] = dsIn.Dval(i);
   }
+  // Update dimension
+  SetDim(Dimension::X, Dimension( dsIn.Dim(0).Min(), dsIn.Dim(0).Step(), Dim(0).Label() ));
   return 0;
 }
 
@@ -275,103 +305,22 @@ int DataSet_Mesh::SetSplinedMesh(DataSet_1D const& dsIn)
   return 0;
 }
 
-// ---------- Linear Regression ------------------------------------------------
-/** This code (especially the error analysis) was adapted from grace 5.1.22
-  * fit.c:linear_regression().
-  */
-int DataSet_Mesh::LinearRegression( double& slope, double& intercept, 
-                                    double& correl, bool silent ) const
-{
-  if (mesh_x_.size() < 2) return 1;
-  double mesh_size = (double)mesh_x_.size();
-  // Averages
-  double xavg = 0.0, yavg = 0.0;
-  for (unsigned int i = 0; i < mesh_x_.size(); i++) {
-    xavg += mesh_x_[i];
-    yavg += mesh_y_[i];
-  }
-  xavg /= mesh_size;
-  yavg /= mesh_size;
-  // Sums of squares
-  double sxx = 0.0, sxy = 0.0, syy = 0.0;
-  for (unsigned int i = 0; i < mesh_x_.size(); i++) {
-    double xdiff = mesh_x_[i] - xavg;
-    double ydiff = mesh_y_[i] - yavg;
-    sxx += (xdiff * xdiff);
-    sxy += (xdiff * ydiff);
-    syy += (ydiff * ydiff);
-  }
-  // Standard deviation, covariance
-  double xsd = sqrt( sxx / (mesh_size - 1.0) );
-  double ysd = sqrt( syy / (mesh_size - 1.0) );
-  if (xsd < Constants::SMALL || ysd < Constants::SMALL) {
-    mprinterr("Error: All values of x or y are the same (SD cannot be zero).\n");
-    return 1;
-  }
-  double covariance = sxy / (mesh_size - 1.0);
-         correl = covariance / (xsd * ysd);
-         slope = sxy / sxx;
-         intercept = yavg - slope * xavg;
-  if (!silent) {
-    mprintf("\tData points= %u\n"
-            "\t<X>= %g\n\t<Y>= %g\n"
-            "\tSDx= %g\n\tSDy= %g\n"
-            "\tCorrelation coefficient= %g\n"
-            "\tSlope= %g\n", mesh_x_.size(),
-            xavg, yavg, xsd, ysd, correl, slope);
-  }
-  // Case N==2, no need for error analysis.
-  if (mesh_x_.size() == 2) {
-    slope = (mesh_y_[1] - mesh_y_[0]) / (mesh_x_[1] - mesh_x_[0]);
-    intercept = mesh_y_[0] - slope * mesh_x_[0];
-    if (!silent) mprintf("\tIntercept= %g\n", intercept);
-    return 0;
-  } 
-  // Error analysis
-  double residualSumSq = syy - slope * sxy;
-  double residualMeanSq = residualSumSq / (mesh_size - 2.0);
-  //double stdErrRegression = sqrt( residualMeanSq );
-  double stdErrIntercept = sqrt( residualMeanSq * (1.0 / mesh_size + xavg * xavg / sxx) );
-  double stdErrSlope = sqrt( residualMeanSq / sxx );
-  double sumSqRegression = syy - residualSumSq;
-  double Fval = sumSqRegression / residualMeanSq;
-  //double R2 = sumSqRegression / syy;
-  if (!silent) {
-    mprintf("\tStandard error of slope= %g\n"
-            "\tt - value for slope= %g\n"
-            "\tIntercept= %g\n"
-            "\tStandard Error of intercept= %g\n"
-            "\tt - value for intercept= %g\n",
-            stdErrSlope, slope / stdErrSlope, 
-            intercept, stdErrIntercept, intercept / stdErrIntercept);
-
-    mprintf("\tVariance analysis:\n\t%-10s %5s %14s %14s %14s\n",
-            "Source", "d.f", "Sum of squares", "Mean square", "F");
-    mprintf("\t%-10s %5d %14.7g %14.7g %14.7g\n", "Regression",
-            1, sumSqRegression, sumSqRegression, Fval);
-    mprintf("\t%-10s %5u %14.7g %14.7g\n", "Residual",
-            mesh_x_.size() - 2, residualSumSq, residualMeanSq);
-    mprintf("\t%-10s %5u %14.7g\n", "Total",  mesh_x_.size() - 1, syy);
-  }
-  return 0;
-}
-
+// ---------- Regression -------------------------------------------------------
 // DataSet_Mesh::SingleExponentialRegression()
 int DataSet_Mesh::SingleExpRegression(double& slope, double& intercept,
-                                      double& correl, bool silent )
+                                      double& correl, CpptrajFile* out )
 {
   std::vector<double> yorig = mesh_y_;
   for (unsigned int i = 0; i != mesh_y_.size(); i++)
   {
     if (mesh_y_[i] <= 0.0) {
-      if (!silent)
-        mprinterr("Error: Cannot perform exp. regression; set contains value <= 0\n");
+      mprinterr("Error: '%s' Cannot perform exp. regression; set contains value <= 0\n", legend());
       mesh_y_ = yorig;
       return 1;
     }
     mesh_y_[i] = log( mesh_y_[i] );
   }
-  int err = LinearRegression(slope, intercept, correl, silent);
+  int err = LinearRegression(slope, intercept, correl, out);
   // Restore original Y values
   mesh_y_ = yorig;
   return err;

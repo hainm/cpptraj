@@ -32,7 +32,7 @@ Analysis_IRED::Analysis_IRED() :
   modinfo_(0)
 {}
 
-void Analysis_IRED::Help() {
+void Analysis_IRED::Help() const {
   mprintf("\t[relax freq <MHz> [NHdist <distnh>]] [order <order>]\n"
           "\ttstep <tstep> tcorr <tcorr> out <filename> [norm] [drct]\n"
           "\tmodes <modesname> [name <output sets name>] [ds2matrix <file>]\n"
@@ -40,11 +40,11 @@ void Analysis_IRED::Help() {
 }
 
 // Analysis_IRED::Setup()
-Analysis::RetType Analysis_IRED::Setup(ArgList& analyzeArgs, DataSetList* DSLin, DataFileList* DFLin, int debugIn)
+Analysis::RetType Analysis_IRED::Setup(ArgList& analyzeArgs, AnalysisSetup& setup, int debugIn)
 {
   debug_ = debugIn;
   // Count and store the number of previously defined IRED vectors.
-  for ( DataSetList::const_iterator DS = DSLin->begin(); DS != DSLin->end(); ++DS) {
+  for ( DataSetList::const_iterator DS = setup.DSL().begin(); DS != setup.DSL().end(); ++DS) {
     if ( (*DS)->Type() == DataSet::VECTOR && (*DS)->Meta().ScalarType() == MetaData::IREDVEC)
       IredVectors_.push_back( (DataSet_Vector*)*DS );
   }
@@ -65,7 +65,7 @@ Analysis::RetType Analysis_IRED::Setup(ArgList& analyzeArgs, DataSetList* DSLin,
     return Analysis::ERR;
   }
   // Check if modes name exists on the stack
-  modinfo_ = (DataSet_Modes*)DSLin->FindSetOfType( modesfile, DataSet::MODES );
+  modinfo_ = (DataSet_Modes*)setup.DSL().FindSetOfType( modesfile, DataSet::MODES );
   if (modinfo_ == 0) {
     mprinterr("Error: %s\n", DataSet_Modes::DeprecateFileMsg);
     return Analysis::ERR;
@@ -73,26 +73,26 @@ Analysis::RetType Analysis_IRED::Setup(ArgList& analyzeArgs, DataSetList* DSLin,
   // Get tstep, tcorr, S2 and Cm(t)/Cj(t) filenames
   tstep_ = analyzeArgs.getKeyDouble("tstep", 1.0);
   tcorr_ = analyzeArgs.getKeyDouble("tcorr", 10000.0);
-  DataFile* orderout = DFLin->AddDataFile(analyzeArgs.GetStringKey("orderparamfile"), analyzeArgs);
+  DataFile* orderout = setup.DFL().AddDataFile(analyzeArgs.GetStringKey("orderparamfile"), analyzeArgs);
   DataFile* outfile = 0;
   std::string filename = analyzeArgs.GetStringKey("out");
   if (!filename.empty()) {
-    outfile  = DFLin->AddDataFile(filename);
-    cmtfile_ = DFLin->AddDataFile(filename + ".cmt");
-    cjtfile_ = DFLin->AddDataFile(filename + ".cjt");
+    outfile  = setup.DFL().AddDataFile(filename);
+    cmtfile_ = setup.DFL().AddDataFile(filename + ".cmt");
+    cjtfile_ = setup.DFL().AddDataFile(filename + ".cjt");
   }
-  DataFile* ds2matfile = DFLin->AddDataFile(analyzeArgs.GetStringKey("ds2matrix"));
+  DataFile* ds2matfile = setup.DFL().AddDataFile(analyzeArgs.GetStringKey("ds2matrix"));
   // Output data sets
   dsname_ = analyzeArgs.GetStringKey("name");
-  if (dsname_.empty()) dsname_ = DSLin->GenerateDefaultName("IRED");
-  data_s2_ = DSLin->AddSet(DataSet::FLOAT, MetaData(dsname_, "S2"));
+  if (dsname_.empty()) dsname_ = setup.DSL().GenerateDefaultName("IRED");
+  data_s2_ = setup.DSL().AddSet(DataSet::FLOAT, MetaData(dsname_, "S2"));
   if (data_s2_ == 0) return Analysis::ERR;
   data_s2_->SetupFormat().SetFormatWidthPrecision(10,5);
   if (orderout != 0) orderout->AddDataSet( data_s2_ );
-  data_plateau_ = DSLin->AddSet(DataSet::DOUBLE, MetaData(dsname_, "Plateau"));
+  data_plateau_ = setup.DSL().AddSet(DataSet::DOUBLE, MetaData(dsname_, "Plateau"));
   if (data_plateau_ == 0) return Analysis::ERR;
   data_plateau_->SetupFormat().SetFormatWidthPrecision(12,8);
-  data_tauM_ = DSLin->AddSet(DataSet::DOUBLE, MetaData(dsname_, "TauM"));
+  data_tauM_ = setup.DSL().AddSet(DataSet::DOUBLE, MetaData(dsname_, "TauM"));
   if (data_tauM_ == 0) return Analysis::ERR;
   data_tauM_->SetupFormat().SetFormatWidthPrecision(12,6);
   if (outfile != 0) {
@@ -100,7 +100,7 @@ Analysis::RetType Analysis_IRED::Setup(ArgList& analyzeArgs, DataSetList* DSLin,
     outfile->AddDataSet( data_tauM_ );
   }
   if (ds2matfile != 0) {
-    data_ds2_mat_ = DSLin->AddSet(DataSet::MATRIX_DBL, MetaData(dsname_, "dS2"));
+    data_ds2_mat_ = setup.DSL().AddSet(DataSet::MATRIX_DBL, MetaData(dsname_, "dS2"));
     if (data_ds2_mat_ == 0) return Analysis::ERR;
     data_ds2_mat_->SetupFormat().SetFormatWidthPrecision(10,5);
     ds2matfile->ProcessArgs("square2d");
@@ -113,10 +113,10 @@ Analysis::RetType Analysis_IRED::Setup(ArgList& analyzeArgs, DataSetList* DSLin,
   // Relax parameters
   DataFile* noefile = 0;
   if (relax_) {
-    noefile = DFLin->AddDataFile(analyzeArgs.GetStringKey("noefile"), analyzeArgs);
-    data_t1_  = DSLin->AddSet(DataSet::DOUBLE, MetaData(dsname_, "T1"));
-    data_t2_  = DSLin->AddSet(DataSet::DOUBLE, MetaData(dsname_, "T2"));
-    data_noe_ = DSLin->AddSet(DataSet::DOUBLE, MetaData(dsname_, "NOE"));
+    noefile = setup.DFL().AddDataFile(analyzeArgs.GetStringKey("noefile"), analyzeArgs);
+    data_t1_  = setup.DSL().AddSet(DataSet::DOUBLE, MetaData(dsname_, "T1"));
+    data_t2_  = setup.DSL().AddSet(DataSet::DOUBLE, MetaData(dsname_, "T2"));
+    data_noe_ = setup.DSL().AddSet(DataSet::DOUBLE, MetaData(dsname_, "NOE"));
     if (data_t1_ == 0 || data_t2_ == 0 || data_noe_ == 0) return Analysis::ERR;
     data_t1_->SetupFormat().SetFormatWidthPrecision(10,5);
     data_t2_->SetupFormat().SetFormatWidthPrecision(10,5);
@@ -142,6 +142,7 @@ Analysis::RetType Analysis_IRED::Setup(ArgList& analyzeArgs, DataSetList* DSLin,
   mprintf("\tData set name: %s\n", dsname_.c_str());
   if (orderout != 0)
     mprintf("\tOrder parameters will be written to '%s'\n", orderout->DataFilename().full());
+  mprintf("\tOrder of Legendre polynomials for calculating spherical harmonics: %i\n", order_);
   mprintf("\tCorrelation time %g, time step %g\n", tcorr_, tstep_);
   mprintf("\tCorrelation functions are");
   if (norm_)
@@ -175,7 +176,7 @@ Analysis::RetType Analysis_IRED::Setup(ArgList& analyzeArgs, DataSetList* DSLin,
           "#          studying the dynamics of folded and nonfolded proteins by\n"
           "#          NMR relaxation spectroscopy and MD simulation\"\n"
           "#          J. Am. Chem. Soc. (2002) V.124 pp.4522-4534\n");
-  masterDSL_ = DSLin;
+  masterDSL_ = setup.DslPtr();
   return Analysis::OK;
 }
 
@@ -216,9 +217,12 @@ Analysis::RetType Analysis_IRED::Analyze() {
   if (data_ds2_mat_ != 0) {
     if (((DataSet_MatrixDbl*)data_ds2_mat_)->Allocate2D(modinfo_->Nmodes(), modinfo_->VectorSize()))
       return Analysis::ERR;
+    data_ds2_mat_->SetDim(Dimension::X, Dimension(1, 1, "Mod"));
+    data_ds2_mat_->SetDim(Dimension::Y, Dimension(1, 1, "Vec"));
     startMode = 0;
   }
   // Loop over all vector elements
+  data_s2_->SetDim(Dimension::X, Dimension(1, 1, "Vec"));
   for (int vi = 0; vi < modinfo_->VectorSize(); ++vi) {
     // Sum according to Eq. A22 in Prompers & Brüschweiler, JACS 124, 4522, 2002
     double sum = 0.0;
@@ -310,7 +314,7 @@ Analysis::RetType Analysis_IRED::Analyze() {
   DataSet_double& Plateau = static_cast<DataSet_double&>( *data_plateau_ );
   Plateau.Resize( modinfo_->Nmodes() ); // Sets all elements to 0.0
   CmtArray_.resize( modinfo_->Nmodes(), 0 );
-  Dimension Tdim(0.0, tstep_, nsteps);
+  Dimension Tdim(0.0, tstep_);
   std::vector<double>::const_iterator CF = cf_tmp.begin();
   for (int mode = 0; mode != modinfo_->Nmodes(); mode++)
   {
@@ -479,6 +483,10 @@ Analysis::RetType Analysis_IRED::Analyze() {
       mprintf("DEBUG: Jw(0, omega_h-omega_n)= %g\n", Jw(0, omega_h - omega_n, TauM_s));
     }
     // Calculate Spectral Densities and NMR relaxation parameters
+    Dimension Vdim(1, 1, "Vec");
+    data_t1_->SetDim(Dimension::X, Vdim);
+    data_t2_->SetDim(Dimension::X, Vdim);
+    data_noe_->SetDim(Dimension::X, Vdim);
     for (unsigned int ivec = 0; ivec != IredVectors_.size(); ivec++)
     {
       double JomegaN = Jw(ivec, omega_n, TauM_s);

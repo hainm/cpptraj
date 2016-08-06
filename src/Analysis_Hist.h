@@ -2,6 +2,7 @@
 #define INC_ANALYSIS_HIST_H
 #include "Analysis.h"
 #include "DataSet_1D.h"
+#include "HistBin.h"
 #include "TrajectoryFile.h" // traj3d
 // Class: Analysis_Hist
 /// Create an N-dimensional histogram from N input datasets
@@ -10,15 +11,15 @@ class Analysis_Hist : public Analysis {
     enum NormMode { NO_NORM = 0, NORM_SUM, NORM_INT };
     Analysis_Hist();
 
-    static DispatchObject* Alloc() { return (DispatchObject*)new Analysis_Hist(); }
-    static void Help();
-    Analysis::RetType ExternalSetup(DataSet_1D*, std::string const&, int, std::string const&,
+    DispatchObject* Alloc() const { return (DispatchObject*)new Analysis_Hist(); }
+    void Help() const;
+    Analysis::RetType ExternalSetup(DataSet_1D*, std::string const&, int, std::string const&, 
                             bool, double, bool, double, double, int, double, NormMode,
                             DataSetList&, DataFileList&);
-    Analysis::RetType Setup(ArgList&,DataSetList*,DataFileList*,int);
+    Analysis::RetType Setup(ArgList&, AnalysisSetup&, int);
     Analysis::RetType Analyze();
   private:
-    int CheckDimension(std::string const&, DataSetList*);
+    int CheckDimension(std::string const&, DataSetList&);
     int setupDimension(ArgList&, DataSet_1D const&, size_t&);
     int CalcFreeE();
     int Normalize();
@@ -35,7 +36,7 @@ class Analysis_Hist : public Analysis {
     OffType binOffsets_;                 ///< Bin offsets for calculating index.
     std::vector<DataSet_1D*> histdata_;  ///< Array of data sets to be binned.
     std::vector<ArgList> dimensionArgs_; ///< Array of args defining histogram dims
-    typedef std::vector<Dimension> HdimType;
+    typedef std::vector<HistBin> HdimType;
     HdimType dimensions_;                ///< Histogram dimensions.
 
     int debug_;                          ///< Debug level
@@ -47,7 +48,10 @@ class Analysis_Hist : public Analysis {
     bool nativeOut_;                     ///< If true, use built in output routine.
     std::string outfilename_;            ///< Stored in case internal write used (DIM > 3)
     size_t N_dimensions_;                ///< # of histogram dimensions.
-    Dimension default_dim_;
+    double default_min_;
+    double default_max_;
+    double default_step_;
+    int default_bins_;
     bool minArgSet_;
     bool maxArgSet_;
     bool calcAMD_;

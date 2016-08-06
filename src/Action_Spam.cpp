@@ -11,7 +11,7 @@
 #include "StringRoutines.h" // integerToString
 
 // CONSTRUCTOR
-Action_Spam::Action_Spam() :
+Action_Spam::Action_Spam() : Action(HIDDEN),
   bulk_(0.0),
   purewater_(false),
   reorder_(false),
@@ -25,7 +25,7 @@ Action_Spam::Action_Spam() :
   overflow_(false)
 { }
 
-void Action_Spam::Help() {
+void Action_Spam::Help() const {
   mprintf("\t<filename> [solv <solvname>] [reorder] [name <name>] [bulk <value>]\n"
           "\t[purewater] [cut <cut>] [info <infofile>] [summary <summary>]\n"
           "\t[site_size <size>] [sphere] [out <datafile>]\n\n"
@@ -47,6 +47,13 @@ void Action_Spam::Help() {
 // Action_Spam::init()
 Action::RetType Action_Spam::Init(ArgList& actionArgs, ActionInit& init, int debugIn)
 {
+# ifdef MPI
+  if (init.TrajComm().Size() > 1) {
+    mprinterr("Error: 'spam' action does not work with > 1 thread (%i threads currently).\n",
+              init.TrajComm().Size());
+    return Action::ERR;
+  }
+# endif
   // Always use imaged distances
   InitImaging(true);
   // This is needed everywhere in this function scope
@@ -75,9 +82,11 @@ Action::RetType Action_Spam::Init(ArgList& actionArgs, ActionInit& init, int deb
   }else {
     // Get the file name with the peaks defined in it
     filename.SetFileName( actionArgs.GetStringNext() );
-
-    if (filename.empty() || !File::Exists(filename)) {
-      mprinterr("Spam: Error: Peak file [%s] does not exist!\n", filename.full());
+    if (filename.empty()) {
+      mprinterr("Error: No Peak file specified.\n");
+      return Action::ERR;
+    } else if (!File::Exists(filename)) {
+      File::ErrorMsg( filename.full() );
       return Action::ERR;
     }
 

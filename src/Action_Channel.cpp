@@ -4,10 +4,10 @@
 #include "DataSet_GridFlt.h"
 
 // CONSTRUCTOR
-Action_Channel::Action_Channel() :
+Action_Channel::Action_Channel() : Action(HIDDEN),
   grid_(0), dxyz_(-1.0) {}
 
-void Action_Channel::Help() {
+void Action_Channel::Help() const {
   mprintf("\t<solute mask> [<solvent mask>] [out <file>] [dx <dx> [dy <dy>] [dz <dz>]]\n");
 }
 
@@ -47,7 +47,7 @@ Action::RetType Action_Channel::Setup(ActionSetup& setup) {
   // Initial grid setup
   if (grid_->Size() == 0) {
     DataSet_3D& GRID = static_cast<DataSet_3D&>( *grid_ );
-    Box const& box = setup.Top().ParmBox();
+    Box const& box = setup.CoordInfo().TrajBox();
     if (box.Type() == Box::NOBOX) {
       mprinterr("Error: No box information to set up grid.\n");
       return Action::ERR;

@@ -5,8 +5,8 @@
 class Action_CheckStructure : public Action {
   public:
     Action_CheckStructure();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_CheckStructure(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_CheckStructure(); }
+    void Help() const;
     // Interface that can be used outside ActionList
     int SeparateInit(bool, std::string const&, std::string const&, std::string const&,
                      double, double, bool, DataFileList&);
@@ -39,6 +39,7 @@ class Action_CheckStructure : public Action {
     double nonbondcut2_; ///< Report distance^2 less than nonbondcut2
     CpptrajFile* outfile_;  ///< Report file.
     Topology* CurrentParm_; ///< Current topology.
+    DataSet* num_problems_; ///< Save number of problems each frame
     bool silent_;           ///< If true suppress output
     bool skipBadFrames_;    ///< If true skip frames with problems
     bool bondcheck_;        ///< If true check bonds as well (default)

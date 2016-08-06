@@ -128,14 +128,14 @@ Analysis_CurveFit::Analysis_CurveFit() :
 {} 
 
 Analysis_CurveFit::Analysis_CurveFit(DataSet* setIn, int suffix, ArgList& argIn,
-                                     DataSetList* DSLin, DataFileList* DFLin, int debugIn)
+                                     DataSetList& DSLin, DataFileList& DFLin, int debugIn)
 {
   dset_ = setIn;
   Internal_setup( integerToString(suffix), argIn, DSLin, DFLin, debugIn );
 }
 
-// Analysis_CurveFit::Help()
-void Analysis_CurveFit::Help() {
+// Analysis_CurveFit::HelpText()
+void Analysis_CurveFit::HelpText() {
   mprintf("\t<dset> { <equation> |\n"
           "\t         name <dsname> nexp <m> [form {mexp|mexpk|mexpk_penalty} }\n"
           "\t[AX=<value> ...] [out <outfile>] [resultsout <results>]\n"
@@ -145,26 +145,31 @@ void Analysis_CurveFit::Help() {
           "    <var> = <expression>\n"
           "  where <var> is the output data set name and <expression> can contain\n"
           "  variable 'X' and parameters A<n>.\n"
-          "  Alternatively, multi-exponential equations can be used via 'nexp' and 'form':\n"
+          "  There are also several preset forms. A Gaussian of the form:\n"
+          "    A0 * exp( -((X - A1)^2) / (2 * A2^2) )\n"
+          "  can be used via 'gauss'. Alternatively, multi-exponential equations can\n"
+          "  be used via 'nexp' and 'form', where form is:\n"
           "    mexp:  SUM(m)[ An * exp(An+1 * X)]\n"
           "    mexpk: A0 + SUM(m)[An * exp(An+1 * X)]\n"
           "    mexpk_penalty: Same as mexpk except sum of prefactors constrained to 1.0 and\n"
           "                   exp. constants constrained to < 0.0.\n");
 }
 
-Analysis::RetType Analysis_CurveFit::Setup(ArgList& analyzeArgs, DataSetList* datasetlist, DataFileList* DFLin, int debugIn)
+void Analysis_CurveFit::Help() const { HelpText(); }
+
+Analysis::RetType Analysis_CurveFit::Setup(ArgList& analyzeArgs, AnalysisSetup& setup, int debugIn)
 {
   // First argument should be DataSet to fit to.
   std::string dsinName = analyzeArgs.GetStringNext();
-  dset_ = datasetlist->GetDataSet( dsinName );
+  dset_ = setup.DSL().GetDataSet( dsinName );
   if (dset_ == 0) {
     mprinterr("Error: Data set '%s' not found.\n", dsinName.c_str());
     return Analysis::ERR;
   }
-  return Internal_setup( "", analyzeArgs, datasetlist, DFLin, debugIn );
+  return Internal_setup( "", analyzeArgs, setup.DSL(), setup.DFL(), debugIn );
 }
 
-Analysis::RetType Analysis_CurveFit::Internal_setup(std::string const& suffixIn, ArgList& analyzeArgs, DataSetList* datasetlist, DataFileList* DFLin, int debugIn)
+Analysis::RetType Analysis_CurveFit::Internal_setup(std::string const& suffixIn, ArgList& analyzeArgs, DataSetList& DSLin, DataFileList& DFLin, int debugIn)
 {
   if (dset_->Ndim() != 1) {
     mprinterr("Error: Curve fitting can only be done with 1D data sets.\n");
@@ -238,9 +243,9 @@ Analysis::RetType Analysis_CurveFit::Internal_setup(std::string const& suffixIn,
     n_expected_params_ = Calc_.Nparams();
   }
   // Get keywords
-  Results_ = DFLin->AddCpptrajFile( analyzeArgs.GetStringKey("resultsout"), "Curve Fit Results",
-                                    DataFileList::TEXT, true );
-  DataFile* outfile = DFLin->AddDataFile( analyzeArgs.GetStringKey("out"), analyzeArgs );
+  Results_ = DFLin.AddCpptrajFile( analyzeArgs.GetStringKey("resultsout"), "Curve Fit Results",
+                                   DataFileList::TEXT, true );
+  DataFile* outfile = DFLin.AddDataFile( analyzeArgs.GetStringKey("out"), analyzeArgs );
   tolerance_ = analyzeArgs.getKeyDouble("tol", 0.0001);
   if (tolerance_ < 0.0) {
     mprinterr("Error: Tolerance must be greater than or equal to 0.0\n");
@@ -288,7 +293,7 @@ Analysis::RetType Analysis_CurveFit::Internal_setup(std::string const& suffixIn,
             n_specified_params_, n_expected_params_);
   // Set up output data set.
   if (!suffixIn.empty()) dsoutName.append(suffixIn);
-  finalY_ = datasetlist->AddSet(DataSet::XYMESH, dsoutName, "FIT");
+  finalY_ = DSLin.AddSet(DataSet::XYMESH, dsoutName, "FIT");
   if (finalY_ == 0) return Analysis::ERR;
   if (outfile != 0) outfile->AddDataSet( finalY_ );
 
@@ -411,7 +416,7 @@ Analysis::RetType Analysis_CurveFit::Analyze() {
       Calc_.Evaluate( Params_, xval, yval );
       Yout.AddXY( xval, yval );
     }
-    Yout.SetDim(Dimension::X, Dimension(outXmin_, xstep, outXbins_));
+    Yout.SetDim(Dimension::X, Dimension(outXmin_, xstep, dset_->Dim(Dimension::X).Label()));
   } else {
     Yout.Allocate( DataSet::SizeArray(1, dset_->Size()) );
     CurveFit::Darray::const_iterator ny = fit.FinalY().begin();

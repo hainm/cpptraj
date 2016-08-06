@@ -5,14 +5,18 @@
 class Action_Volmap : public Action {
   public:
     Action_Volmap();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_Volmap(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_Volmap(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
+#   ifdef MPI
+    int SyncAction();
+    Parallel::Comm trajComm_;
+#   endif
     Action::RetType Setup(ActionSetup&);
     Action::RetType DoAction(int, ActionFrame&);
     void Print();
-    static void RawHelp();
+    void RawHelp() const;
 
     /// grid resolutions
     double dx_, dy_, dz_;
@@ -39,6 +43,5 @@ class Action_Volmap : public Action {
     /// the scaling factor to divide all radii by
     double radscale_;
     static const double sqrt_8_pi_cubed;
-    static const double one_over_6;
 };
 #endif

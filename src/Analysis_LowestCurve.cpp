@@ -1,18 +1,19 @@
 #include "Analysis_LowestCurve.h"
 #include "CpptrajStdio.h"
+#include "HistBin.h"
 
 Analysis_LowestCurve::Analysis_LowestCurve() : points_(0), step_(0.0) {}
 
-void Analysis_LowestCurve::Help() {
+void Analysis_LowestCurve::Help() const {
   mprintf("\tpoints <# lowest> [step <stepsize>] <dset0> [<dset1> ...]\n"
           "\t[out <file>] [name <setname>]\n"
           "  Calculate a curve of the average of the # lowest points in bins of stepsize.\n");
 }
 
 // Analysis_LowestCurve::Setup()
-Analysis::RetType Analysis_LowestCurve::Setup(ArgList& analyzeArgs, DataSetList* datasetlist, DataFileList* DFLin, int debugIn)
+Analysis::RetType Analysis_LowestCurve::Setup(ArgList& analyzeArgs, AnalysisSetup& setup, int debugIn)
 {
-  DataFile* outfile = DFLin->AddDataFile(analyzeArgs.GetStringKey("out"), analyzeArgs);
+  DataFile* outfile = setup.DFL().AddDataFile(analyzeArgs.GetStringKey("out"), analyzeArgs);
   points_ = analyzeArgs.getKeyInt("points", -1);
   if (points_ < 1) {
     mprinterr("Error: 'points' must be specified and > 0\n");
@@ -21,7 +22,7 @@ Analysis::RetType Analysis_LowestCurve::Setup(ArgList& analyzeArgs, DataSetList*
   step_ = analyzeArgs.getKeyDouble("step", 1.0);
   std::string setname = analyzeArgs.GetStringKey("name");
   // Select datasets from remaining args
-  if (input_dsets_.AddSetsFromArgs( analyzeArgs.RemainingArgs(), *datasetlist )) {
+  if (input_dsets_.AddSetsFromArgs( analyzeArgs.RemainingArgs(), setup.DSL() )) {
     mprinterr("Error: Could not add data sets.\n");
     return Analysis::ERR;
   }
@@ -31,9 +32,9 @@ Analysis::RetType Analysis_LowestCurve::Setup(ArgList& analyzeArgs, DataSetList*
   }
   // Create output data sets
   if (setname.empty())
-    setname = datasetlist->GenerateDefaultName("LOWCURVE");
+    setname = setup.DSL().GenerateDefaultName("LOWCURVE");
   for (Array1D::const_iterator DS = input_dsets_.begin(); DS != input_dsets_.end(); ++DS) {
-    DataSet* dsout = datasetlist->AddSet(DataSet::DOUBLE,
+    DataSet* dsout = setup.DSL().AddSet(DataSet::DOUBLE,
                                          MetaData(setname, DS - input_dsets_.begin()));
     if (dsout == 0)
       return Analysis::ERR;
@@ -61,12 +62,18 @@ Analysis::RetType Analysis_LowestCurve::Analyze() {
                                DS != input_dsets_.end();
                              ++DS, ++OUT)
   {
-    // Determine an appropriate dimension based on the step size.
-    Dimension Xdim;
-    Xdim.SetMin( (*DS)->Xcrd(0) );
-    Xdim.SetMax( (*DS)->Xcrd((*DS)->Size()-1) );
-    Xdim.SetStep( step_ );
-    if (Xdim.CalcBinsOrStep()) continue;
+    // Determine an appropriate dimension based on the step size. Since there
+    // is no guarantee that X values are in order (e.g. in XY MESH), get
+    // min/max directly.
+    HistBin Xdim;
+    double min = (*DS)->Xcrd(0);
+    double max = (*DS)->Xcrd((*DS)->Size()-1);
+    for (unsigned int n = 0; n != (*DS)->Size(); ++n) {
+      double xval = (*DS)->Xcrd( n );
+      min = std::min( min, xval );
+      max = std::max( max, xval );
+    }
+    if (Xdim.CalcBinsOrStep(min,max,step_,-1,(*DS)->Dim(Dimension::X).Label())) continue;
     Larray bins_( Xdim.Bins() + 1 );
     mprintf("\tSet '%s' has %i bins (%g < %g, %g)\n", (*DS)->legend(),
             Xdim.Bins(), Xdim.Min(), Xdim.Max(), Xdim.Step());

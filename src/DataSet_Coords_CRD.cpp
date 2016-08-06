@@ -1,5 +1,6 @@
 #include "DataSet_Coords_CRD.h"
 #include "CpptrajStdio.h"
+#include "StringRoutines.h" // ByteString
 
 int DataSet_Coords_CRD::Allocate(SizeArray const& sizeIn) {
   if (!sizeIn.empty())
@@ -11,7 +12,7 @@ int DataSet_Coords_CRD::CoordsSetup(Topology const& topIn, CoordinateInfo const&
   top_ = topIn;
   cInfo_ = cInfoIn;
   numCrd_ = top_.Natom() * 3;
-  if (top_.ParmBox().HasBox())
+  if (cInfo_.TrajBox().HasBox())
     numBoxCrd_ = 6;
   else
     numBoxCrd_ = 0;
@@ -32,17 +33,34 @@ int DataSet_Coords_CRD::CoordsSetup(Topology const& topIn, CoordinateInfo const&
   return 0;
 }
 
-double DataSet_Coords_CRD::sizeInMB(size_t nframes, size_t natom, size_t nbox) {
+size_t DataSet_Coords_CRD::sizeInBytes(size_t nframes, size_t natom, size_t nbox) {
   size_t frame_size_bytes = ((natom * 3UL) + nbox) * sizeof(float);
-  double sze = (double)((nframes * frame_size_bytes) + sizeof(CRDarray));
-  return (sze / (1024 * 1024));
+  return ((nframes * frame_size_bytes) + sizeof(CRDarray));
 }
 
 void DataSet_Coords_CRD::Info() const {
-  double sze = sizeInMB(coords_.size(), top_.Natom(), numBoxCrd_);
-  if (sze < 1.0)
-    mprintf(" (<1 MB)");
-  else
-    mprintf(" (%.2f MB)", sze);
+  mprintf(" (%s)",
+          ByteString(sizeInBytes(coords_.size(), top_.Natom(), numBoxCrd_), BYTE_DECIMAL).c_str());
   CommonInfo();
 }
+
+#ifdef MPI
+int DataSet_Coords_CRD::Sync(size_t total, std::vector<int> const& rank_frames,
+                             Parallel::Comm const& commIn)
+{
+  if (commIn.Size()==1) return 0;
+  if (commIn.Master()) {
+    // Resize for total number of frames.
+    coords_.resize( total, std::vector<float>( numCrd_+numBoxCrd_ ) );
+    int cidx = rank_frames[0]; // Index on master
+    // Receive data from each rank
+    for (int rank = 1; rank < commIn.Size(); rank++) {
+      for (int ridx = 0; ridx != rank_frames[rank]; ridx++, cidx++)
+        commIn.SendMaster( &(coords_[cidx][0]), numCrd_+numBoxCrd_, rank, MPI_FLOAT );
+    }
+  } else // Send data to master
+    for (unsigned int ridx = 0; ridx != coords_.size(); ++ridx)
+      commIn.SendMaster( &(coords_[ridx][0]), numCrd_+numBoxCrd_, commIn.Rank(), MPI_FLOAT );
+  return 0;
+}
+#endif

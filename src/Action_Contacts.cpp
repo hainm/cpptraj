@@ -13,7 +13,7 @@ Action_Contacts::Action_Contacts() :
   outfile_(0), outfile2_(0)
 { }
 
-void Action_Contacts::Help() {
+void Action_Contacts::Help() const {
   mprintf("\t[ first | reference | ref <ref> | refindex <#> ] [byresidue]\n"
           "\t[out <filename>] [time <interval>] [distance <cutoff>] [<mask>]\n"
           "  Calculate contacts for each frame based on a reference.\n"
@@ -51,7 +51,14 @@ int Action_Contacts::SetupContacts(Frame const& refframe, Topology const& refpar
 // Action_Contacts::Init()
 Action::RetType Action_Contacts::Init(ArgList& actionArgs, ActionInit& init, int debugIn)
 {
-
+# ifdef MPI
+  // Since output is to CpptrajFiles, not practical in parallel.
+  if (init.TrajComm().Size() > 1) {
+    mprinterr("Error: 'contacts' action does not work with > 1 thread (%i threads currently).\n"
+              "Error:   Consider using 'nativecontacts' instead.\n", init.TrajComm().Size());
+    return Action::ERR;
+  }
+# endif
   byResidue_ = actionArgs.hasKey("byresidue");
   double dist = actionArgs.getKeyDouble("distance", 7.0);
   dt_ = actionArgs.getKeyDouble("time", 1.0);

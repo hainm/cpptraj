@@ -6,12 +6,16 @@
 class Action_Dipole : public Action, private GridAction {
   public:
     Action_Dipole();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_Dipole(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_Dipole(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
     Action::RetType DoAction(int, ActionFrame&);
+#   ifdef MPI
+    int SyncAction();
+    Parallel::Comm trajComm_;
+#   endif
     void Print();
 
     DataSet_GridFlt* grid_;

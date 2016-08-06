@@ -12,7 +12,7 @@ Action_Dihedral::Action_Dihedral() :
   useMass_(false)
 { } 
 
-void Action_Dihedral::Help() {
+void Action_Dihedral::Help() const {
   mprintf("\t[<name>] <mask1> <mask2> <mask3> <mask4> [out filename] [mass]\n"
           "\t[type {alpha|beta|gamma|delta|epsilon|zeta|chi|c2p|h1p|phi|psi|pchi}]\n"
           "\t[range360] [idx <index>]\n"
@@ -33,6 +33,8 @@ Action::RetType Action_Dihedral::Init(ArgList& actionArgs, ActionInit& init, int
   MetaData::scalarType stype = MetaData::UNDEFINED;
   std::string stypename = actionArgs.GetStringKey("type");
   if (!stypename.empty()) {
+    // For backwards compat. with ptraj, convert 'chi' to 'chin'
+    if (stypename == "chi") stypename.assign("chin");
     stype = MetaData::TypeFromKeyword( stypename, MetaData::M_TORSION );
     if (stype == MetaData::UNDEFINED) {
       mprinterr("Error: Invalid torsion type keyword '%s'\n", stypename.c_str());

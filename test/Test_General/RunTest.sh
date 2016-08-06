@@ -9,6 +9,11 @@ fi
 # Clean
 CleanFiles general.in distance.dat rmsd.dat rmsda.dat phi2.dat PhiPsi.dat test.crd a1.dat Restart/* test.nc r4.dat a2.dat.gz a3.dat.bz2 r2.dat r3-nofit.dat
 
+NotParallel "General tests"
+if [[ $? -eq 1 ]] ; then
+  EndTest
+  exit 0
+fi
 # Check libraries
 CheckNetcdf
 CheckZlib
@@ -67,7 +72,11 @@ DoTest a1.dat.save a1.dat
 DoTest test.rst7.213.save Restart/test.rst7.213
 NcTest test.nc.save test.nc
 DoTest r4.dat.save r4.dat
-DoTest a2.dat.gz.save a2.dat.gz
+# NOTE: a2.dat.gz comparison allowed to fail on windows; differences caused
+#       by different newline characters in compressed file.
+if [[ $TEST_OS != "windows" ]] ; then
+  DoTest a2.dat.gz.save a2.dat.gz
+fi
 DoTest a3.dat.bz2.save a3.dat.bz2
 DoTest r2.dat.save r2.dat
 DoTest r3-nofit.dat.save r3-nofit.dat

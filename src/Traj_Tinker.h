@@ -8,7 +8,6 @@ class Traj_Tinker : public TrajectoryIO {
     Traj_Tinker();
     static BaseIOtype* Alloc() { return (BaseIOtype*)new Traj_Tinker(); }
   private:
-    Topology* tinkerTop_;
     int currentSet_;
     TinkerFile file_; 
 
@@ -23,6 +22,7 @@ class Traj_Tinker : public TrajectoryIO {
     void Info();
     int processWriteArgs(ArgList&) { return 0; }
     int readVelocity(int, Frame&)  { return 1; }
+    int readForce(int, Frame&)     { return 1; }
     int processReadArgs(ArgList&)  { return 0; }
 };
 #endif

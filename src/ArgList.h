@@ -65,6 +65,8 @@ class ArgList {
     bool CommandIs(const char*) const;
     /// \return the next unmarked string
     std::string const& GetStringNext();
+    /// \return true if argument at position is a potential mask.
+    bool ArgIsMask(unsigned int) const;
     /// \return the next unmarked mask
     std::string const& GetMaskNext();
     /// \return the next unmarked tag
@@ -75,6 +77,8 @@ class ArgList {
     double getNextDouble(double);
     /// \return the string following the given key
     std::string const& GetStringKey(const char *);
+    /// \return string following given key or default if not found.
+    std::string const& GetStringKey(const char *, std::string const&);
     /// \return the integer following the given key 
     int getKeyInt(const char *, int);
     /// \return the double following the given key

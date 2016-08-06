@@ -1,4 +1,3 @@
-// Traj_PDBfile
 #include "Traj_PDBfile.h"
 #include "CpptrajStdio.h"
 
@@ -15,6 +14,8 @@ Traj_PDBfile::Traj_PDBfile() :
   pdbatom_(false),
   write_cryst1_(false),
   include_ep_(false),
+  writeConect_(false),
+  prependExt_(false),
   pdbTop_(0),
   chainchar_(' ')
 {}
@@ -158,19 +159,21 @@ int Traj_PDBfile::readFrame(int set, Frame& frameIn)
 }
 
 void Traj_PDBfile::WriteHelp() {
-  mprintf("\tdumpq:       Write atom charge/GB radius in occupancy/B-factor columns (PQR format).\n"
-          "\tparse:       Write atom charge/PARSE radius in occupancy/B-factor columns (PQR format).\n"
-          "\tvdw:         Write atom charge/VDW radius in occupancy/B-factor columns (PQR format).\n"
-          "\tpdbres:      Use PDB V3 residue names.\n"
-          "\tpdbatom:     Use PDB V3 atom names.\n"
-          "\tpdbv3:       Use PDB V3 residue/atom names.\n"
-          "\tteradvance:  Increment record (atom) # for TER records (default no).\n"
-          "\tterbyres:    Print TER cards based on residue sequence instead of molecules.\n"
-          "\tmodel:       Write to single file separated by MODEL records.\n"
-          "\tmulti:       Write each frame to separate files.\n"
+  mprintf("\tdumpq      : Write atom charge/GB radius in occupancy/B-factor columns (PQR format).\n"
+          "\tparse      : Write atom charge/PARSE radius in occupancy/B-factor columns (PQR format).\n"
+          "\tvdw        : Write atom charge/VDW radius in occupancy/B-factor columns (PQR format).\n"
+          "\tpdbres     : Use PDB V3 residue names.\n"
+          "\tpdbatom    : Use PDB V3 atom names.\n"
+          "\tpdbv3      : Use PDB V3 residue/atom names.\n"
+          "\tteradvance : Increment record (atom) # for TER records (default no).\n"
+          "\tterbyres   : Print TER cards based on residue sequence instead of molecules.\n"
+          "\tmodel      : Write to single file separated by MODEL records.\n"
+          "\tmulti      : Write each frame to separate files.\n"
           "\tchainid <c>: Write character 'c' in chain ID column.\n"
-          "\tsg <group>:  Space group for CRYST1 record, only if box coordinates written.\n"
-          "\tinclude_ep:  Include extra points.\n");
+          "\tsg <group> : Space group for CRYST1 record, only if box coordinates written.\n"
+          "\tinclude_ep : Include extra points.\n"
+          "\tconect     : Write CONECT records using bond information.\n"
+          "\tkeepext    : Keep filename extension; write '<name>.<num>.<ext>' instead (implies 'multi').\n");
 }
 
 // Traj_PDBfile::processWriteArgs()
@@ -202,6 +205,9 @@ int Traj_PDBfile::processWriteArgs(ArgList& argIn) {
   if (argIn.hasKey("model")) pdbWriteMode_ = MODEL;
   if (argIn.hasKey("multi")) pdbWriteMode_ = MULTI;
   include_ep_ = argIn.hasKey("include_ep");
+  writeConect_ = argIn.hasKey("conect");
+  prependExt_ = argIn.hasKey("keepext"); // Implies MULTI
+  if (prependExt_) pdbWriteMode_ = MULTI;
   space_group_ = argIn.GetStringKey("sg");
   std::string temp = argIn.GetStringKey("chainid");
   if (!temp.empty()) chainchar_ = temp[0];
@@ -270,6 +276,29 @@ int Traj_PDBfile::setupTrajout(FileName const& fname, Topology* trajParm,
         else if ( rname[1] == 'C' ) rname=" DC ";
         else if ( rname[1] == 'A' ) rname=" DA ";
         else if ( rname[1] == 'T' ) rname=" DT ";
+      } else if ( rname == "URA" || rname == "URI" )
+        rname="  U ";
+      else if ( rname == "THY" )
+        rname=" DT ";
+      else if ( rname == "GUA" || rname == "ADE" || rname == "CYT" ) {
+        // Determine if RNA or DNA via existence of O2'
+        bool isRNA = false;
+        for (int ratom = res->FirstAtom(); ratom != res->LastAtom(); ++ratom)
+          if ( (*trajParm)[ratom].Name() == "O2'" ||
+               (*trajParm)[ratom].Name() == "O2*" )
+          {
+            isRNA = true;
+            break;
+          }
+        if (isRNA) {
+          if      (rname[0] == 'G') rname="  G ";
+          else if (rname[0] == 'A') rname="  A ";
+          else if (rname[0] == 'C') rname="  C ";
+        } else {
+          if      (rname[0] == 'G') rname=" DG ";
+          else if (rname[0] == 'A') rname=" DA ";
+          else if (rname[0] == 'C') rname=" DC ";
+        }
       }
       resNames_.push_back( rname );
     }
@@ -329,6 +358,8 @@ int Traj_PDBfile::setupTrajout(FileName const& fname, Topology* trajParm,
       mprintf(" %i", *idx + 1);
     mprintf("\n");
   }
+  // Allocate space to hold ATOM record #s if writing CONECT records
+  if (writeConect_) atrec_.resize( trajParm->Natom() );
   // If number of frames to write > 1 and not doing 1 pdb file per frame,
   // set write mode to MODEL
   if (append || (pdbWriteMode_==SINGLE && NframesToWrite>1)) 
@@ -365,7 +396,7 @@ int Traj_PDBfile::setupTrajout(FileName const& fname, Topology* trajParm,
 int Traj_PDBfile::writeFrame(int set, Frame const& frameOut) {
   if (pdbWriteMode_==MULTI) {
     // If writing 1 pdb per frame set up output filename and open
-    if (file_.OpenWriteNumbered( set + 1 )) return 1;
+    if (file_.OpenWriteNumbered( set + 1, prependExt_ )) return 1;
     if (!Title().empty()) 
       file_.WriteTITLE( Title() );
     if (write_cryst1_)
@@ -418,6 +449,7 @@ int Traj_PDBfile::writeFrame(int set, Frame const& frameOut) {
                        pdbTop_->Res(res).Icode(),
                        Xptr[0], Xptr[1], Xptr[2], Occ, B,
                        atom.ElementName(), 0, dumpq_);
+      if (writeConect_) atrec_[aidx] = anum; // Store ATOM record #
     }
     anum++;
     // Check and see if a TER card should be written.
@@ -429,6 +461,11 @@ int Traj_PDBfile::writeFrame(int set, Frame const& frameOut) {
       anum += ter_num_;
       ++terIdx;
     }
+  }
+  // Write CONECT records for each ATOM
+  if (writeConect_) {
+    for (int aidx = 0; aidx != pdbTop_->Natom(); aidx++)
+      file_.WriteCONECT( atrec_[aidx], atrec_, (*pdbTop_)[aidx] );
   }
   if (pdbWriteMode_==MULTI) {
     // If writing 1 pdb per frame, close output file
@@ -450,6 +487,7 @@ void Traj_PDBfile::Info() {
       mprintf(" (1 file per frame)");
     else if (pdbWriteMode_==MODEL)
       mprintf(" (1 MODEL per frame)");
+    if (writeConect_) mprintf(" with CONECT records");
     if (dumpq_) {
       mprintf(", writing charges to occupancy column and ");
       switch (radiiMode_) {
@@ -467,3 +505,23 @@ void Traj_PDBfile::Info() {
       mprintf(", using PDB V3 atom names");
   }
 }
+#ifdef MPI
+/// Not valid for MODEL (checked in setup) so no need to do anything.
+int Traj_PDBfile::parallelOpenTrajout(Parallel::Comm const& commIn) { return 0; }
+
+int Traj_PDBfile::parallelSetupTrajout(FileName const& fname, Topology* trajParm,
+                                           CoordinateInfo const& cInfoIn,
+                                           int NframesToWrite, bool append,
+                                           Parallel::Comm const& commIn)
+{
+  if (pdbWriteMode_ != MULTI) {
+    mprinterr("Error: PDB write in parallel requires 'multi' keyword.\n");
+    return 1;
+  }
+  return setupTrajout(fname, trajParm, cInfoIn, NframesToWrite, append);
+}
+
+int Traj_PDBfile::parallelWriteFrame(int set, Frame const& frameOut) {
+  return ( writeFrame(set, frameOut) );
+}
+#endif

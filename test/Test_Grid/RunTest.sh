@@ -4,7 +4,7 @@
 
 CleanFiles ptraj.in out.dipole out.xplor out.dx out.dx.2 test.dx box.dx mask.dx \
            nonortho.dx triclinic.nc nonortho.pdb bounds.dat bounds.mol2 \
-           bounds.xplor avg.mol2
+           bounds.xplor avg.mol2 nonortho_wrap.dx
 
 CheckNetcdf
 INPUT="ptraj.in"
@@ -45,11 +45,13 @@ GridDxRead() {
   TOP="../tz2.truncoct.parm7"
   cat > ptraj.in <<EOF
 readdata out.dx.save
-trajin ../tz2.truncoct.nc 1 1
-grid out.dx.2 data out.dx.save :1588 opendx  
+trajin ../tz2.truncoct.nc
+autoimage origin
+rms first :1-13
+grid out.dx.2 data out.dx.save @CA opendx  
 EOF
   RunCpptraj "OpenDX Grid read test"
-  DoTest out.dx.save out.dx.2
+  DoTest out.dx.2.save out.dx.2
   CheckTest
 }
 
@@ -101,6 +103,19 @@ EOF
   DoTest nonortho.dx.save nonortho.dx
 }
 
+# Non-orthogonal grid, points centered on bins
+NonorthoGridBinCenter() {
+  TOP="../tz2.truncoct.parm7"
+  cat > ptraj.in <<EOF
+trajin ../tz2.truncoct.nc
+reference ../tz2.truncoct.nc [REF]
+autoimage triclinic
+grid nonortho_wrap.dx boxref [REF] 20 20 20 :WAT@O gridwrap name BC
+EOF
+  RunCpptraj "Non-orthogonal grid centered on bin center and wrapped test"
+  DoTest nonortho_wrap.dx.save nonortho_wrap.dx
+}
+
 # Generate grid from bounds
 Bounds() {
   TOP="../tz2.ortho.parm7"
@@ -126,6 +141,7 @@ SpecifiedCenter
 BoxCenterOffset
 MaskCenterOffset
 NonorthogonalGrid
+NonorthoGridBinCenter
 Bounds
 
 EndTest

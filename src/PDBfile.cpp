@@ -45,6 +45,9 @@ bool PDBfile::IsPDBkeyword(std::string const& recname) {
   if (recname.compare(0,5,"ORIGX" )==0) return true; // ORIGXn
   if (recname.compare(0,5,"MTRIX" )==0) return true; // MTRIXn
   if (recname.compare(0,9,"USER  MOD")==0) return true; // reduce
+  // Bookkeeping Section
+  if (recname.compare(0,6,"MASTER")==0) return true;
+  if (recname.compare(0,3,"END"   )==0) return true;
   return false;
 }
 
@@ -56,7 +59,7 @@ bool PDBfile::ID_PDB(CpptrajFile& fileIn) {
   std::string line2 = fileIn.GetLine();
   fileIn.CloseFile();
   if (!IsPDBkeyword( line1 )) return false;
-  if (!IsPDBkeyword( line2 )) return false;
+  if (!line2.empty() && !IsPDBkeyword( line2 )) return false;
   return true;
 }
 
@@ -150,17 +153,52 @@ void PDBfile::pdb_XYZ(double *Xout) {
   linebuffer_[54] = savechar;
 }
 
-void PDBfile::pdb_OccupanyAndBfactor(float& occ, float& bfac) {
-  // Occupancy (54-59) | charge
-  // B-factor (60-65) | radius
-  sscanf(linebuffer_+54, "%f %f", &occ, &bfac);
+// PDBfile::pdb_OccupancyAndBfactor()
+void PDBfile::pdb_OccupancyAndBfactor(float& occ, float& bfac) {
+  // Occupancy (54-60)
+  char savechar = linebuffer_[60];
+  linebuffer_[60] = '\0';
+  occ = atof(linebuffer_ + 54);
+  linebuffer_[60] = savechar;
+  // B-factor (60-66)
+  savechar = linebuffer_[66];
+  linebuffer_[66] = '\0';
+  bfac = atof(linebuffer_ + 60);
+  linebuffer_[66] = savechar;
+}
+  
+/** Read charge and radius from PQR file (where occupancy and B-factor would be
+  * in a PDB). Use sscanf() since these columns could have different widths.
+  * Could fail if reading a PDB with values > 99.99 in B-factor column.
+  */
+void PDBfile::pdb_ChargeAndRadius(float& charge, float& radius) {
+  sscanf(linebuffer_+54, "%f %f", &charge, &radius);
 }
 
-void PDBfile::pdb_Box(double* box) const {
+void PDBfile::pdb_Box(double* box) {
   // CRYST1 keyword. RECORD A B C ALPHA BETA GAMMA SGROUP Z
-  // A=6-15 B=15-24 C=24-33 alpha=33-40 beta=40-47 gamma=47-54
-  sscanf(linebuffer_, "%*6s%9lf%9lf%9lf%7lf%7lf%7lf", box, box+1, box+2,
-         box+3, box+4, box+5);
+  unsigned int lb_size = strlen(linebuffer_);
+  if (lb_size < 54) {
+    mprintf("Warning: Malformed CRYST1 record. Skipping.\n");
+    return;
+  }
+  // A=6-15 B=15-24 C=24-33
+  unsigned int lb = 6;
+  for (unsigned int ib = 0; ib != 3; ib++, lb += 9) {
+    unsigned int end = lb + 9;
+    char savechar = linebuffer_[end];
+    linebuffer_[end] = '\0';
+    box[ib] = atof( linebuffer_ + lb );
+    linebuffer_[end] = savechar;
+  }
+  // alpha=33-40 beta=40-47 gamma=47-54
+  for (unsigned int ib = 3; ib != 6; ib++, lb += 7) {
+    unsigned int end = lb + 7;
+    char savechar = linebuffer_[end];
+    linebuffer_[end] = '\0';
+    box[ib] = atof( linebuffer_ + lb );
+    linebuffer_[end] = savechar;
+  }
   mprintf("\tRead CRYST1 info from PDB: a=%g b=%g c=%g alpha=%g beta=%g gamma=%g\n",
           box[0], box[1], box[2], box[3], box[4], box[5]);
   // Warn if the box looks strange.
@@ -169,10 +207,29 @@ void PDBfile::pdb_Box(double* box) const {
             " this usually indicates an invalid box.\n");
 }
 
-int PDBfile::pdb_Bonds(int* bnd) const {
-  int Nscan = sscanf(linebuffer_, "%*6s%5i%5i%5i%5i%5i", bnd, bnd+1, bnd+2, bnd+3, bnd+4);
+int PDBfile::pdb_Bonds(int* bnd) {
+  unsigned int lb_size = strlen(linebuffer_);
+  int Nscan = 0;
+  for (unsigned int lb = 6; lb < lb_size; lb += 5) {
+    // Check if first char is newline or final char is blank.
+    if (linebuffer_[lb] == '\n' || linebuffer_[lb + 4] == ' ') break;
+    // Safety valve
+    if (Nscan == 5) {
+      mprintf("Warning: CONECT record has more than 4 bonds. Only using first 4 bonds.\n");
+      break;
+    }
+    unsigned int end = lb + 5;
+    char savechar = linebuffer_[end];
+    linebuffer_[end] = '\0';
+    bnd[Nscan++] = atof( linebuffer_ + lb );
+    linebuffer_[end] = savechar;
+  }
   if (Nscan < 2)
     mprintf("Warning: Malformed CONECT record: %s", linebuffer_);
+  //mprintf("DEBUG: CONECT: Atom record %i to", bnd[0]);
+  //for (int i = 1; i < Nscan; i++)
+  //  mprintf(" %i", bnd[i]);
+  //mprintf("\n");
   return Nscan;
 }
 
@@ -326,6 +383,22 @@ void PDBfile::WriteCRYST1(const double* box, const char* space_group) {
 void PDBfile::WriteMODEL(int model) {
   // Since num frames could be large, do not format the integer with width - OK?
   Printf("MODEL     %i\n", model);
+}
+
+/** Write CONECT record: 1-6 CONECT, 7-11 serial #, 12-16 serial # ... */
+void PDBfile::WriteCONECT(int atnum, std::vector<int> const& atrec, Atom const& atomIn) {
+  if (atomIn.Nbonds() < 1) return;
+  // PDB V3.3 spec: target-atom serial #s carried on these records also occur in increasing order.
+  Atom atom(atomIn);
+  atom.SortBonds();
+  int nbond = 0;
+  while (nbond < atom.Nbonds()) {
+    if ((nbond % 4) == 0)
+      Printf("CONECT%5i", atnum);
+    Printf("%5i", atrec[atom.Bond(nbond++)]);
+    if ((nbond % 4) == 0 || nbond == atom.Nbonds())
+      Printf("\n");
+  }
 }
 
 void PDBfile::WriteENDMDL() { Printf("ENDMDL\n"); }

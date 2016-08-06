@@ -5,12 +5,16 @@
 class Action_Bounds : public Action {
   public:
     Action_Bounds();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_Bounds(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_Bounds(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
     Action::RetType DoAction(int, ActionFrame&);
+#   ifdef MPI
+    int SyncAction();
+    Parallel::Comm trajComm_;
+#   endif
     void Print();
     AtomMask mask_;
     CpptrajFile* outfile_;

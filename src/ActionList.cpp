@@ -15,24 +15,18 @@ void ActionList::Clear() {
   actionList_.clear();
 }
 
-// ActionList::SetDebug()
-void ActionList::SetDebug(int debugIn) {
-  debug_ = debugIn;
-  if (debug_ > 0)
-    mprintf("ActionList DEBUG LEVEL SET TO %i\n",debug_);
-}
-
 // ActionList::AddAction()
-int ActionList::AddAction(DispatchObject::DispatchAllocatorType Alloc, ArgList& argIn,
-                          ActionInit& init)
+int ActionList::AddAction(Action* actIn, ArgList& argIn, ActionInit& init)
 {
+  if (actIn == 0) {
+    mprinterr("Internal Error: AddAction() called with null Action.\n");
+    return 1;
+  }
   int err = 0;
   if (actionsAreSilent_) SetWorldSilent( true );
   ActHolder act;
-  act.alloc_ = Alloc;
-  act.ptr_ = (Action*)Alloc();
+  act.ptr_ = actIn;
   act.args_ = argIn;
-  if (act.ptr_ == 0) return 1;
   // Attempt to initialize action
   if ( act.ptr_->Init( argIn, init, debug_ ) != Action::OK ) {
     mprinterr("Error: Could not initialize action [%s]\n", argIn.Command());
@@ -51,7 +45,7 @@ int ActionList::AddAction(DispatchObject::DispatchAllocatorType Alloc, ArgList& 
 /** Attempt to set up all actions in the action list with the given parm
   * If an action cannot be set up skip it.
   */
-int ActionList::SetupActions(ActionSetup& setup) {
+int ActionList::SetupActions(ActionSetup& setup, bool exitOnError) {
   if (actionList_.empty()) return 0;
   ActionSetup OriginalSetup = setup;
   mprintf(".....................................................\n");
@@ -66,7 +60,8 @@ int ActionList::SetupActions(ActionSetup& setup) {
       Action::RetType err = act->ptr_->Setup(setup);
       if (err == Action::ERR) {
         mprinterr("Error: Setup failed for [%s]\n", act->args_.Command());
-        return 1;
+        if (exitOnError) return 1;
+        act->status_ = INIT;
       } else if (err == Action::SKIP) {
         mprintf("Warning: Setup incomplete for [%s]: Skipping\n", act->args_.Command());
         // Reset action status to INIT (pre-setup)
@@ -117,17 +112,56 @@ bool ActionList::DoActions(int frameNumIn, ActionFrame& frm) {
 }
 
 // ActionList::Print()
-void ActionList::Print() {
+void ActionList::PrintActions() {
   for (Aarray::const_iterator act = actionList_.begin(); act != actionList_.end(); ++act)
   { // Skip deactivated actions
     if (act->status_ != INACTIVE)
       act->ptr_->Print();
   }
 }
+#ifdef MPI
+int ActionList::NumPreviousFramesReqd() const {
+  int nrequired = 0;
+  for (Aarray::const_iterator act = actionList_.begin(); act != actionList_.end(); ++act)
+  { // Skip deactivated actions
+    if (act->status_ != INACTIVE)
+      nrequired = std::max( nrequired, act->ptr_->ParallelPreviousFramesRequired() );
+  }
+  if (debug_ > 0) rprintf("DEBUG: Action(s) require %i previous frames.\n", nrequired);
+  return nrequired;
+}
 
+/** Should not be called by master. */
+int ActionList::ParallelProcessPreload(Action::FArray const& preload_frames) {
+  int err = 0;
+  for (Aarray::iterator act = actionList_.begin(); act != actionList_.end(); ++act)
+  { // Skip deactivated actions
+    if (act->status_ != INACTIVE) {
+      //rprintf("DEBUG: Calling ParallelPreloadFrames() for '%s'\n", act->args_.Command());
+      if (act->ptr_->ParallelPreloadFrames( preload_frames )) {
+        rprintf("Warning: Parallel Preload failed for Action '%s'\n", act->args_.Command());
+        act->status_ = INACTIVE;
+        err++;
+      }
+    }
+  }
+  return err;
+}
+
+void ActionList::SyncActions() {
+  for (Aarray::const_iterator act = actionList_.begin(); act != actionList_.end(); ++act)
+  { // Skip deactivated actions
+    if (act->status_ != INACTIVE) {
+      //rprintf("DEBUG: Calling SyncAction() for '%s'\n", act->args_.Command());
+      if (act->ptr_->SyncAction())
+        rprintf("Warning: Sync failed for Action '%s'\n", act->args_.Command());
+    }
+  }
+}
+#endif
 void ActionList::List() const {
   if (!actionList_.empty()) {
-    mprintf("\nACTIONS:\n");
+    mprintf("\nACTIONS (%zu total):\n", actionList_.size());
     for (Aarray::const_iterator act = actionList_.begin(); act != actionList_.end(); ++act)
       mprintf("  %u: [%s]\n", act - actionList_.begin(), act->args_.ArgLine());
   }

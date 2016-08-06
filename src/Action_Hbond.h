@@ -10,12 +10,16 @@
 class Action_Hbond : public Action {
   public:
     Action_Hbond();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_Hbond(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_Hbond(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
     Action::RetType DoAction(int, ActionFrame&);
+#   ifdef MPI
+    int SyncAction();
+    Parallel::Comm trajComm_;
+#   endif
     void Print();
 
     struct HbondType {
@@ -66,6 +70,7 @@ class Action_Hbond : public Action {
     Topology* CurrentParm_;
 
     bool series_;
+    bool seriesUpdated_;
     std::string hbsetname_;
     DataSet* NumHbonds_;
     DataSet* NumSolvent_;
@@ -103,9 +108,14 @@ class Action_Hbond : public Action {
 
     void SearchAcceptor(HBlistType&,AtomMask&,bool);
     void SearchDonor(HBlistType&,AtomMask&,bool,bool);
-    double MemoryUsage(size_t, size_t) const;
+    std::string MemoryUsage(size_t, size_t) const;
+    void UpdateSeries();
     inline int AtomsAreHbonded(Frame const&, int, int, int, int, int,bool);
     inline void HbondTypeCalcAvg(HbondType&);
     inline double ImagedAngle(const double*, const double*, const double*) const;
+#   ifdef MPI
+    void SyncMap(HBmapType&, std::vector<int> const&, std::vector<int> const&,
+                 const char*, Parallel::Comm const&) const;
+#   endif
 };
 #endif

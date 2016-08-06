@@ -20,6 +20,10 @@ int FloatWidth(double);
 void RemoveTrailingWhitespace(std::string &);
 /// \return string stripped of trailing whitespace.
 std::string NoTrailingWhitespace(std::string const&);
+/// Remove all whitespace from a string
+void RemoveAllWhitespace(std::string&);
+/// \return string with all whitespace removed.
+std::string NoWhitespace(std::string const&);
 /// Convert string to integer.
 int convertToInteger(std::string const &);
 /// Convert string to double.
@@ -36,10 +40,10 @@ bool validInteger(std::string const&);
 bool validDouble(std::string const&);
 /// \return the current date/time with format 'mm/dd/yy  hh:mm:ss'
 std::string TimeString();
-// NOTE: Not really string routines, but here for convenience.
-long long AvailableMemory();
-double AvailableMemory_MB();
-# ifdef __APPLE__
-long long TotalGlobalMemory();
-# endif
+/// BYTE_BINARY: Sizes are based on 1024^X. BYTE_DECIMAL: Sizes are based on 1000^X.
+enum ByteType { BYTE_BINARY = 0, BYTE_DECIMAL };
+/// \return Given size in bytes as a human-readable string.
+std::string ByteString(unsigned long long, ByteType);
+/// \return String containing size of available physical memory.
+std::string AvailableMemoryStr();
 #endif

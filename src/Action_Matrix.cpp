@@ -17,7 +17,7 @@ Action_Matrix::Action_Matrix() :
   useMass_(false)
 {}
 
-void Action_Matrix::Help() {
+void Action_Matrix::Help() const {
   mprintf("\t[out <filename>] %s\n", ActionFrameCounter::HelpText);
   mprintf("\t[name <name>] [ byatom | byres [mass] | bymask [mass] ]\n"
           "\t[ ired [order <#>] ]\n"
@@ -38,6 +38,9 @@ void Action_Matrix::Help() {
 // Action_Matrix::Init()
 Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int debugIn)
 {
+# ifdef MPI
+  trajComm_ = init.TrajComm();
+# endif
   debug_ = debugIn;
   // Get Keywords
   std::string outfilename = actionArgs.GetStringKey("out");
@@ -133,7 +136,7 @@ Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int d
   Mat_->SetMatrixKind( mkind );
   // Set default precision for backwards compat.
   Mat_->SetupFormat().SetFormatWidthPrecision(6, 3);
-  Mat_->Dim(Dimension::X).SetLabel("Atom");
+  Mat_->ModifyDim(Dimension::X).SetLabel("Atom");
   // Determine what will be output.
   matByRes_ = 0;
   outfile_ = 0;
@@ -151,7 +154,11 @@ Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int d
       matByRes_ = (DataSet_MatrixDbl*)init.DSL().AddSet(DataSet::MATRIX_DBL, md);
       if (matByRes_ == 0) return Action::ERR;
       matByRes_->SetupFormat().SetFormatWidthPrecision(6, 3);
-      matByRes_->Dim(Dimension::X).SetLabel("Res");
+      matByRes_->ModifyDim(Dimension::X).SetLabel("Res");
+#     ifdef MPI
+      // Since by-residue matrix allocated in Print(), no sync needed.
+      matByRes_->SetNeedsSync( false );
+#     endif
     } 
     outfile_ = init.DFL().AddDataFile(outfilename, actionArgs);
     if (outfile_ != 0) {
@@ -791,7 +798,7 @@ void Action_Matrix::CalcDistanceCovarianceMatrix(Frame const& currentFrame) {
 // Action_Matrix::DoAction()
 Action::RetType Action_Matrix::DoAction(int frameNum, ActionFrame& frm) {
   // Check if this frame should be processed
-  if ( CheckFrameCounter( frameNum ) ) return Action::OK;
+  if ( CheckFrameCounter( frm.TrajoutNum() ) ) return Action::OK;
   // Increment number of snapshots
   Mat_->IncrementSnapshots();
 
@@ -810,6 +817,19 @@ Action::RetType Action_Matrix::DoAction(int frameNum, ActionFrame& frm) {
   return Action::OK;
 }
 
+#ifdef MPI
+int Action_Matrix::SyncAction() {
+  if (!vect2_.empty()) {
+    if (trajComm_.Master()) {
+      Darray buf( vect2_.size() );
+      trajComm_.Reduce( &(buf[0]), &(vect2_[0]), vect2_.size(), MPI_DOUBLE, MPI_SUM );
+      vect2_ = buf;
+    } else
+      trajComm_.Reduce( 0,         &(vect2_[0]), vect2_.size(), MPI_DOUBLE, MPI_SUM );
+  }
+  return 0;
+}
+#endif
 // -----------------------------------------------------------------------------
 void Action_Matrix::Vect2MinusVect() {
   v_iterator v2 = vect2_.begin();

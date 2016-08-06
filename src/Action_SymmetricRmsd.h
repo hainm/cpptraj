@@ -7,14 +7,13 @@
 class Action_SymmetricRmsd : public Action {
   public:
     Action_SymmetricRmsd();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_SymmetricRmsd(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_SymmetricRmsd(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
     Action::RetType DoAction(int, ActionFrame&);
     void Print() {}
-
     DataSet* rmsd_;           ///< Output DataSet
     Action::RetType action_return_; ///< Used to indicate if frame has been modified.
     ReferenceAction REF_;     ///< Hold reference frame/traj/options

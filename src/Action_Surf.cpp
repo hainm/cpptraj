@@ -5,12 +5,12 @@
 #include "CpptrajStdio.h"
 #include "DistRoutines.h"
 #ifdef _OPENMP
-#  include "omp.h"
+#  include <omp.h>
 #endif
 // CONSTRUCTOR
 Action_Surf::Action_Surf() : surf_(0) {} 
 
-void Action_Surf::Help() {
+void Action_Surf::Help() const {
   mprintf("\t<name> <mask1> [out filename]\n"
           "  Calculate LCPO surface area of atoms in <mask1>\n");
 }

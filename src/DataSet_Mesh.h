@@ -11,9 +11,11 @@ class DataSet_Mesh : public DataSet_1D {
     static DataSet* Alloc() { return (DataSet*)new DataSet_Mesh();            }
     void Resize(size_t n)   { mesh_x_.resize(n, 0.0); mesh_y_.resize(n, 0.0); }
     // ----- DataSet functions -------------------
-    size_t Size()            const { return mesh_x_.size();     }
-    int Sync()                     { return 0;                  }
-    void Info()              const { return;                    }
+    size_t Size()                       const { return mesh_x_.size();     }
+#   ifdef MPI
+    int Sync(size_t, std::vector<int> const&, Parallel::Comm const&);
+#   endif
+    void Info()                         const { return;                    }
     int Allocate(SizeArray const&);
     void Add( size_t, const void* );
     void WriteBuffer(CpptrajFile&, SizeArray const&) const;
@@ -31,9 +33,9 @@ class DataSet_Mesh : public DataSet_1D {
     /// Calculate mesh X values given size, start, and end values.
     void CalculateMeshX(int,double,double);
     /// Set mesh X and Y values from input data set.
-    int SetMeshXY(DataSet_1D const&);
+    int SetMeshXY(DataSet_1D const&); // TODO remove
     /// Set mesh X and Y values from input arrays.
-    inline int SetMeshXY(std::vector<double> const&, std::vector<double> const&);
+    inline int SetMeshXY(std::vector<double> const&, std::vector<double> const&); // TODO remove
     // -------------------------------------------
     /// Integrate the mesh, compute cumulative sum
     double Integrate_Trapezoid( DataSet_Mesh& ) const;
@@ -45,10 +47,8 @@ class DataSet_Mesh : public DataSet_1D {
     /// Set mesh with splined values based on input DataSet.
     int SetSplinedMesh(DataSet_1D const&);
     // -------------------------------------------
-    /// Calculate linear regression; report slope, intercept, and correlation.
-    int LinearRegression( double&, double&, double&, bool ) const;
     /// Calculate single exponential regression via log and linear regression.
-    int SingleExpRegression(double&, double&, double&, bool);
+    int SingleExpRegression(double&, double&, double&, CpptrajFile*);
   private:
     void cubicSpline_coeff(std::vector<double> const&, std::vector<double> const&);
     void cubicSpline_eval(std::vector<double> const&, std::vector<double> const&);

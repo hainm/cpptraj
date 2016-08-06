@@ -31,7 +31,9 @@ DataSet_Modes::DataSet_Modes() :
   evectors_(0),
   nmodes_(0),
   vecsize_(0),
-  reduced_(false)
+  reduced_(false),
+  evecsAreMassWtd_(false),
+  evalsAreFreq_(false)
 {}
 
 // DESTRUCTOR
@@ -41,17 +43,23 @@ DataSet_Modes::~DataSet_Modes() {
 }
 
 // DataSet_Modes::SetAvgCoords()
-void DataSet_Modes::SetAvgCoords(DataSet_2D const& mIn) {
+int DataSet_Modes::SetAvgCoords(DataSet_2D const& mIn) {
   avgcrd_.clear();
   mass_.clear();
   if (mIn.Type() == DataSet::MATRIX_DBL && mIn.Meta().ScalarType() != MetaData::UNDEFINED) 
   { // May have avg coords 
     DataSet_MatrixDbl const& mat = static_cast<DataSet_MatrixDbl const&>( mIn );
     avgcrd_ = mat.Vect();
+    if (mIn.Meta().ScalarType() == MetaData::MWCOVAR && mat.Mass().empty()) {
+      mprinterr("Internal Error: MWCOVAR Matrix '%s' does not have mass info.\n", mIn.legend());
+      return 1;
+    }
     mass_ = mat.Mass();
   }
+  return 0;
 }
 
+// DataSet_Modes::SetModes()
 int DataSet_Modes::SetModes(bool reducedIn, int nmodesIn, int vecsizeIn, 
                             const double* evalsIn, const double* evecsIn)
 {
@@ -76,44 +84,61 @@ int DataSet_Modes::SetModes(bool reducedIn, int nmodesIn, int vecsizeIn,
     std::copy( evecsIn, evecsIn + nmodes_ * vecsize_, evectors_ );
   }
   reduced_ = reducedIn;
+  // If MWCOVAR, assume eigenvectors are mass-weighted and eigenvalues are in cm^-1
+  if (Meta().ScalarType() == MetaData::MWCOVAR) {
+    mprintf("Info: '%s' type is mass-weighted covariance; assuming mass-weighted eigenvectors\n"
+            "Info:   and eigenvalues in cm^-1.\n", legend());
+    evecsAreMassWtd_ = true;
+    evalsAreFreq_ = true;
+  }
   return 0;
 }
 
-/** Get eigenvectors and eigenvalues. They will be stored in descending 
-  * order (largest eigenvalue first).
+/** Get n_to_calc eigenvectors and eigenvalues from given matrix. They will be
+  * stored in descending order (largest eigenvalue first).
   */
 int DataSet_Modes::CalcEigen(DataSet_2D const& mIn, int n_to_calc) {
-#ifdef NO_MATHLIB
-  mprinterr("Error: modes: Compiled without ARPACK/LAPACK/BLAS routines.\n");
+# ifdef NO_MATHLIB
+  mprinterr("Error: Compiled without LAPACK/BLAS routines.\n");
   return 1;
-#else
+# else
   bool eigenvaluesOnly = false;
   int info = 0;
+  int ncols = (int)mIn.Ncols();
   if (mIn.MatrixKind() != DataSet_2D::HALF) {
-    mprinterr("Error: DataSet_Modes: Eigenvector/value calc only for symmetric matrices.\n");
+    mprinterr("Error: Eigenvector/value calc only for symmetric matrices.\n");
     return 1;
   }
   // If number to calc is 0, assume we want eigenvalues only
   if (n_to_calc < 1) {
     if (n_to_calc == 0) eigenvaluesOnly = true;
-    nmodes_ = (int)mIn.Ncols();
+    nmodes_ = ncols;
   } else
     nmodes_ = n_to_calc;
-  if (nmodes_ > (int)mIn.Ncols()) {
-    mprintf("Warning: Specified # of eigenvalues to calc (%i) > matrix dimension (%i).\n",
-            nmodes_, mIn.Ncols());
-    nmodes_ = mIn.Ncols();
-    mprintf("Warning: Only calculating %i eigenvalues.\n", nmodes_);
+  if (nmodes_ > ncols) {
+    mprintf("Warning: Specified # of eigenmodes to calc (%i) > matrix dimension (%i).\n",
+            nmodes_, ncols);
+    nmodes_ = ncols;
+    mprintf("Warning: Only calculating %i eigenmodes.\n", nmodes_);
   }
+  bool calcAll = (nmodes_ == ncols);
+# ifdef NO_ARPACK
+  if (!calcAll) {
+    mprintf("Warning: Compiled without ARPACK. All %i modes must be calculated, may be slow.\n",
+            ncols);
+    calcAll = true;
+  }
+# endif
   if (eigenvaluesOnly)
-    mprintf("\tCalculating %i eigenvalues only.\n", nmodes_);
+    mprintf("\tCalculating eigenvalues only.\n");
   else
-    mprintf("\tCalculating %i eigenvectors and eigenvalues.\n", nmodes_);
+    mprintf("\tCalculating eigenvectors and eigenvalues.\n");
   // -----------------------------------------------------------------
-  if (nmodes_ == (int)mIn.Ncols()) {
+  if (calcAll) {
+    mprintf("\tCalculating all eigenmodes.\n");
     // Calculate all eigenvalues (and optionally eigenvectors). 
     char jobz = 'V'; // Default: Calc both eigenvectors and eigenvalues
-    vecsize_ = mIn.Ncols();
+    vecsize_ = ncols;
     // Check if only calculating eigenvalues
     if (eigenvaluesOnly) {
       jobz = 'N';
@@ -122,23 +147,23 @@ int DataSet_Modes::CalcEigen(DataSet_2D const& mIn, int n_to_calc) {
     // Set up space to hold eigenvectors
     if (evectors_ != 0) delete[] evectors_;
     if (!eigenvaluesOnly)
-      evectors_ = new double[ nmodes_ * vecsize_ ];
+      evectors_ = new double[ ncols * vecsize_ ];
     else
       evectors_ = 0;
     // Set up space to hold eigenvalues
     if (evalues_ != 0) delete[] evalues_;
-    evalues_ = new double[ nmodes_ ];
+    evalues_ = new double[ ncols ];
     // Create copy of matrix since call to dspev destroys it
     double* mat = mIn.MatrixArray();
     // Lower triangle; not upper since fortran array layout is inverted w.r.t. C/C++
     char uplo = 'L'; 
     // Allocate temporary workspace
-    double* work = new double[ 3 * nmodes_ ];
+    double* work = new double[ 3 * ncols ];
     // NOTE: The call to dspev is supposed to store eigenvectors in columns. 
     //       However as mentioned above fortran array layout is inverted
     //       w.r.t. C/C++ so eigenvectors end up in rows.
     // NOTE: Eigenvalues/vectors are returned in ascending order.
-    dspev_(jobz, uplo, nmodes_, mat, evalues_, evectors_, vecsize_, work, info);
+    dspev_(jobz, uplo, ncols, mat, evalues_, evectors_, vecsize_, work, info);
     // If no eigenvectors calcd set vecsize to 0
     if (evectors_==0)
       vecsize_ = 0;
@@ -147,7 +172,7 @@ int DataSet_Modes::CalcEigen(DataSet_2D const& mIn, int n_to_calc) {
     if (info != 0) {
       if (info < 0) {
         mprinterr("Internal Error: from dspev: Argument %i had illegal value.\n", -info);
-        mprinterr("Args: %c %c %i matrix %x %x %i work %i\n", jobz, uplo, nmodes_,  
+        mprinterr("Args: %c %c %i matrix %x %x %i work %i\n", jobz, uplo, ncols,
                   evalues_, evectors_, vecsize_, info);
       } else { // info > 0
         mprinterr("Internal Error: from dspev: The algorithm failed to converge.\n");
@@ -156,15 +181,36 @@ int DataSet_Modes::CalcEigen(DataSet_2D const& mIn, int n_to_calc) {
       }
       return 1;
     }
+#   ifdef NO_ARPACK
+    if (nmodes_ < ncols) {
+      mprintf("\tSaving only first %i eigenmodes\n", nmodes_);
+      int start_idx = ncols - nmodes_;
+      // Resize eigenvectors and eigenvalues
+      double *temp_vals = new double[ nmodes_ ];
+      std::copy( evalues_ + start_idx, evalues_ + ncols, temp_vals );
+      delete[] evalues_;
+      evalues_ = temp_vals;
+      if (!eigenvaluesOnly) {
+        double *temp_vecs = new double[ nmodes_ * vecsize_ ];
+        std::copy( evectors_ + (start_idx * vecsize_),
+                   evectors_ + (ncols * vecsize_), temp_vecs );
+        delete[] evectors_;
+        evectors_ = temp_vecs;
+      }
+    }
+#   endif
   // -----------------------------------------------------------------
-  } else {
+  }
+# ifndef NO_ARPACK
+  else {
+    mprintf("\tCalculating first %i eigenmodes.\n", nmodes_);
     // Calculate up to n-1 eigenvalues/vectors using the Implicitly Restarted
     // Arnoldi iteration.
     // FIXME: Eigenvectors obtained with this method appear to have signs
     //        flipped compared to full method - is dot product wrong?
-    int nelem = mIn.Ncols(); // Dimension of input matrix (N)
+    int nelem = ncols; // Dimension of input matrix (N)
     // Allocate memory to store eigenvectors
-    vecsize_ = mIn.Ncols();
+    vecsize_ = ncols;
     int ncv; // # of columns of the matrix V (evectors_), <= N (mIn.Ncols())
     if (evectors_!=0) delete[] evectors_;
     if (nmodes_*2 <= nelem) 
@@ -249,6 +295,7 @@ int DataSet_Modes::CalcEigen(DataSet_2D const& mIn, int n_to_calc) {
       return 1;
     }
   }
+# endif
   // Eigenvalues and eigenvectors are in ascending order. Resort so that
   // they are in descending order (i.e. largest eigenvalue first).
   int pivot = nmodes_ / 2;
@@ -274,7 +321,7 @@ int DataSet_Modes::CalcEigen(DataSet_2D const& mIn, int n_to_calc) {
   if (vtmp != 0) delete[] vtmp;
 
   return 0;
-#endif
+# endif /* NO_MATHLIB */
 }
 
 // DataSet_Modes::PrintModes()
@@ -297,6 +344,7 @@ void DataSet_Modes::PrintModes() {
   * Frequency = sqrt( Ene / (mass * MSF)) = sqrt( Ene / Eigval )
   */
 int DataSet_Modes::EigvalToFreq(double tempIn) {
+  if (evalsAreFreq_) return 0;
   // KT is in kcal/mol
   // TO_CM1 is conversion from (kcal / mol * A^2)^-.5 to units of cm^-1
   // = (sqrt(4184 * 1000) / (TWOPI * C)) * 1E8;
@@ -314,20 +362,25 @@ int DataSet_Modes::EigvalToFreq(double tempIn) {
       return 1;
     }
   }
+  evalsAreFreq_ = true;
   return 0;
 }
 
 /** Mass-weight Eigenvectors. Currently only works when vector size
-  * is a multiple of 3 (i.e. COVAR-type matrix. Size of massIn
-  * must be == number of modes (TODO: Make std::vector). The
-  * ith xyz elements of each eigenvector is multiplied by mass i.
+  * is a multiple of 3 (i.e. COVAR-type matrix. Size of mass
+  * must be == number of modes. The ith xyz elements of each
+  * eigenvector is multiplied by 1/sqrt(mass i).
   */
-int DataSet_Modes::MassWtEigvect(DataSet_MatrixDbl::Darray const& massIn) {
-  if (massIn.empty()) return 1;
+int DataSet_Modes::MassWtEigvect() {
+  if (evecsAreMassWtd_) return 0;
   if (evectors_ == 0) return 0;
+  if (mass_.empty()) {
+    mprinterr("Internal Error: No mass info set for modes '%s'.\n", legend());
+    return 1;
+  }
   mprintf("\tMass-weighting %i eigenvectors\n", nmodes_);
   int vend = nmodes_ * vecsize_; // == size of evectors array
-  DataSet_MatrixDbl::Darray::const_iterator mptr = massIn.begin();
+  Darray::const_iterator mptr = mass_.begin();
   for (int vi = 0; vi < vecsize_; vi += 3) {
     double mass = 1.0 / sqrt( *(mptr++) );
     for (int modev = vi; modev < vend; modev += vecsize_) {
@@ -338,6 +391,7 @@ int DataSet_Modes::MassWtEigvect(DataSet_MatrixDbl::Darray const& massIn) {
       evectors_[modev+2] *= mass;
     }
   }
+  evecsAreMassWtd_ = true;
   return 0;
 }
 
@@ -450,14 +504,18 @@ int DataSet_Modes::ReduceDistCovar() {
 */
 int DataSet_Modes::Thermo( CpptrajFile& outfile, int ilevel, double temp, double patm) const
 {
+  if (!evalsAreFreq_) {
+    mprinterr("Internal Error: DataSet_Modes::Thermo: Expected eigenvalues as cm^-1\n");
+    return 1;
+  }
   // avgcrd_   Contains coordinates in Angstroms
   // mass_     Contains masses in amu.
   // nmodes_   Number of eigenvectors (already converted to frequencies)
   // evalues_  vibrational frequencies, in cm**-1 and in ascending order
   double rtemp, rtemp1, rtemp2, rtemp3;
-  // ----- Constants -------------------
+  // ----- Constants ------------------- TODO use Constants.h
   const double thresh = 900.0;        // vibrational frequency threshold
-  const double tokg   = 1.660531e-27; // kilograms per amu.
+//  const double tokg   = 1.660531e-27; // kilograms per amu.
   const double boltz  = 1.380622e-23; // boltzman constant, in joules per kelvin.
   const double planck = 6.626196e-34; // planck constant, in joule-seconds.
 //  const double avog   = 6.022169e+23; // avogadro constant, in mol**(-1).
@@ -493,7 +551,7 @@ int DataSet_Modes::Thermo( CpptrajFile& outfile, int ilevel, double temp, double
   for (Darray::const_iterator m = mass_.begin(); m != mass_.end(); ++m)
     weight += *m;
   outfile.Printf(" molecular mass (principal isotopes) %11.5f amu\n", weight);
-  weight *= tokg;
+  weight *= Constants::AMU_TO_KG;
   
   //trap non-unit multiplicities.
   //if (multip != 1) {
@@ -575,7 +633,7 @@ int DataSet_Modes::Thermo( CpptrajFile& outfile, int ilevel, double temp, double
   outfile.Printf("\n rotational symmetry number %3.0f\n", sn);
 
   double con = planck / (boltz*8.0*pipi);
-  con = (con / tokg)  *  (planck / (tomet*tomet));
+  con = (con / Constants::AMU_TO_KG)  *  (planck / (tomet*tomet));
   if (linear) {
     rtemp = con / pmom[2];
     if (rtemp < 0.2) {

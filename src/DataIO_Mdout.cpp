@@ -31,7 +31,7 @@ static inline int EOF_ERROR() {
 
 const char* DataIO_Mdout::Enames[] = {
   "Etot",   "EPtot",  "GMAX",  "BOND",
-  "ANGLE",  "DIHED",  "VDW",   "EELEC",      "EGB",
+  "ANGLE",  "DIHED",  "VDW",   "EELEC",      "EGB",     "EPB", "ECAVITY", "EDISPER",
   "VDW1-4", "EEL1-4", "RST",   "EAMBER",     "Density",
   "RMS",    "EKtot",  "ESURF", "EAMD_BOOST", "VOLUME",  "TEMP",
   "PRESS",  "DVDL",   0
@@ -49,6 +49,9 @@ DataIO_Mdout::FieldType DataIO_Mdout::getEindex(Sarray const& Name) {
   if (Name[0]=="VDWAALS") return VDWAALS;
   if (Name[0]=="EEL" || Name[0]=="EELEC") return EEL;
   if (Name[0]=="EGB") return EGB;
+  if (Name[0]=="EPB") return EPB;
+  if (Name[0]=="ECAVITY") return ECAVITY;
+  if (Name[0]=="EDISPER") return EDISPER;
   if ((Name[0]=="1-4" && Name[1]=="VDW") || (Name[0]=="1-4" && Name[1]=="NB")) return VDW14;
   if  (Name[0]=="1-4" && Name[1]=="EEL") return EEL14;
   if (Name[0]=="RESTRAINT") return RESTRAINT;
@@ -248,6 +251,10 @@ int DataIO_Mdout::ReadData(FileName const& fname,
   }
   mprintf("\t%i frames\n", frame);
   buffer.CloseFile();
-  if (datasetlist.AddOrAppendSets( TimeVals, inputSets )) return 1;
+  std::string Xlabel;
+  if      (imin == 5) Xlabel.assign("Set");
+  else if (imin == 1) Xlabel.assign("Nstep");
+  else                Xlabel.assign("Time"); // imin == 0
+  if (datasetlist.AddOrAppendSets( Xlabel, TimeVals, inputSets )) return 1;
   return 0;
 }

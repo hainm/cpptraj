@@ -1,14 +1,15 @@
 #ifndef INC_ACTION_STFC_DIFFUSION_H
 #define INC_ACTION_STFC_DIFFUSION_H
 #include "Action.h"
+#include "ImagedAction.h"
 /** \author Hannes H. Loeffler
   * \author C++ adaptation by Daniel R. Roe
   */
 class Action_STFC_Diffusion : public Action {
   public:
     Action_STFC_Diffusion();
-    static DispatchObject* Alloc() { return (DispatchObject*)new Action_STFC_Diffusion(); }
-    static void Help();
+    DispatchObject* Alloc() const { return (DispatchObject*)new Action_STFC_Diffusion(); }
+    void Help() const;
   private:
     Action::RetType Init(ArgList&, ActionInit&, int);
     Action::RetType Setup(ActionSetup&);
@@ -44,5 +45,6 @@ class Action_STFC_Diffusion : public Action {
     Darray dSum2_;
     std::vector<int> nInside_;
     int elapsedFrames_;
+    ImagedAction image_; ///< Imaging routines.
 };
 #endif    
