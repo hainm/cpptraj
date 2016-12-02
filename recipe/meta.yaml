@@ -8,9 +8,6 @@ package:
   name: {{ name }}
   version: {{ version }}
 
-source:
-  src : ../
-
 requirements:
   build:
     - zlib
