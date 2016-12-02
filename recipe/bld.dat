@@ -1,3 +1,2 @@
-xcopy %RECIPE_DIR%\\..\\ %SRC_DIR% /e /h /Y /Q
 ./configure gnu
 make
