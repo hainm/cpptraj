@@ -25,3 +25,5 @@ install:
 
 test_script:
   - "%CMD_IN_ENV% conda build recipe" 
+
+build: false
