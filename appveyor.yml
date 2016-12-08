@@ -6,10 +6,6 @@ environment:
     CMD_IN_ENV: "cmd /E:ON /V:ON /C run_with_env.cmd"
     PYTHONUNBUFFERED: 1
   matrix:
-    - PYTHON: "C:\\Miniconda3"
-      CONDA_PY: "35"
-      CONDA_NPY: "1.10"
-
     - PYTHON: "C:\\Miniconda3-x64"
       CONDA_PY: "35"
       CONDA_NPY: "1.10"
