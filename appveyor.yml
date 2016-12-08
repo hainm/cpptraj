@@ -15,7 +15,7 @@ environment:
       ARCH: "64"
 
 install:
-   - "sh -lc \"
+   - sh -lc \"
       if [ ! -f /usr/local/lib/libnetcdf.a ]; then
         curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip &&
         7z x netcdf-4.3.3.zip -o$APPVEYOR_BUILD_FOLDER > /dev/null &&
