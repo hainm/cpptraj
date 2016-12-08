@@ -6,7 +6,7 @@ package:
   version: {{ version }}
 
 source:
-    path: ../netcdf-4.3.3.zip
+    path: ../netcdf-4.3.3
 
 # requirements:
 #   build:
