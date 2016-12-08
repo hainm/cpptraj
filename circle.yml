@@ -1,0 +1,17 @@
+machine:
+  services:
+    - docker
+
+dependencies:
+  override:
+    - docker pull ambermd/amber-build-box
+
+# test:
+#   override:
+#     # - sh devtools/ci/run_docker_build.sh
+#     - sh devtools/ci/run_docker_build_wheels.sh
+#   post:
+#     - mkdir $CIRCLE_ARTIFACTS/pytraj-build
+#     - cp dist/wheelhouse/pytraj*whl $CIRCLE_ARTIFACTS/pytraj-build/
+#     # - cp pytraj*bz2 $CIRCLE_ARTIFACTS/pytraj-build/
+#     # - cp libcpptraj*bz2 $CIRCLE_ARTIFACTS/pytraj-build/
