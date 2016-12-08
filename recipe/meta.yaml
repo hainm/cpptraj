@@ -16,7 +16,7 @@ requirements:
     - zlib
     - bzip2
     - libnetcdf
-    - openblas
+    - openblas [linux]
     - libgfortran [linux]
     - mingwpy
     - gcc [linux]
@@ -24,7 +24,7 @@ requirements:
     - zlib
     - bzip2
     - libnetcdf
-    - openblas
+    - openblas [linux]
     - libgfortran [linux]
     - gcc [linux]
 
