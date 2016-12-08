@@ -15,6 +15,14 @@ environment:
       ARCH: "64"
 
 install:
+  - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
+  - conda config --add channels conda-forge
+  - conda install mingwpy -y
+  - conda update conda -y
+  - conda update --all -y
+  - conda install conda-build -y
+  - python -c "import sys; print(sys.prefix)"
+  - python --version
   - "sh -lc \"
      if [ ! -f /usr/local/lib/libnetcdf.a ]; then
        curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip &&
@@ -27,13 +35,6 @@ install:
        echo 'Have Cached NetCDF';
      fi
   \""
-  - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
-  - conda config --add channels conda-forge
-  - conda update conda -y
-  - conda update --all -y
-  - conda install conda-build -y
-  - python -c "import sys; print(sys.prefix)"
-  - python --version
 
 test_script:
   - "%CMD_IN_ENV% conda build netcdf433" 
