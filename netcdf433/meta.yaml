@@ -1,0 +1,32 @@
+{% set name = "netcdf433" %}
+{% set version = os.getenv('VERSION', '4.3.3') %}
+
+package:
+  name: {{ name }}
+  version: {{ version }}
+
+source:
+    src: ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip
+    fn: netcdf-4.3.3.zip
+
+# requirements:
+#   build:
+#     - zlib
+#     - bzip2
+#     - libnetcdf
+#     - openblas
+#     - libgfortran [linux]
+#     - mingwpy
+#     - gcc [linux]
+#   run:
+#     - zlib
+#     - bzip2
+#     - libnetcdf
+#     - openblas
+#     - libgfortran [linux]
+#     - gcc [linux]
+
+about:
+    home: https://github.com/amber-md/cpptraj/
+    license: GPL v3
+    summary: Biomolecular simulation trajectory/data analysis. 

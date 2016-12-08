@@ -21,6 +21,7 @@ install:
   - python --version
 
 test_script:
+  - "%CMD_IN_ENV% conda build netcdf433" 
   - "%CMD_IN_ENV% conda build recipe" 
 
 build: false
