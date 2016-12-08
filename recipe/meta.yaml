@@ -16,14 +16,15 @@ requirements:
     - zlib
     - bzip2
     - libnetcdf
-    - openblas [linux]
+    - openblas
     - libgfortran [linux]
+    - mingwpy
     - gcc [linux]
   run:
     - zlib
     - bzip2
     - libnetcdf
-    - openblas [linux]
+    - openblas
     - libgfortran [linux]
     - gcc [linux]
 

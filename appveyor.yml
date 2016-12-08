@@ -17,6 +17,7 @@ environment:
 
 install:
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
+  - conda config --add channels conda-forge
   - conda update conda -y
   - conda update --all -y
   - conda install conda-build -y
