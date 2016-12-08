@@ -6,12 +6,8 @@ package:
   version: {{ version }}
 
 source:
-  path: $APPVEYOR_BUILD_FOLDER/netcdf-4.3.3
+  path: ../netcdf-4.3.3
  
-build:
-  script_env:
-    - APPVEYOR_BUILD_FOLDER
-
 # requirements:
 #   build:
 #     - zlib
