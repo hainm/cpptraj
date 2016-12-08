@@ -6,8 +6,7 @@ package:
   version: {{ version }}
 
 source:
-    src: ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip
-    fn: netcdf-4.3.3.zip
+    path: ../netcdf-4.3.3.zip
 
 # requirements:
 #   build:

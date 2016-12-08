@@ -15,6 +15,7 @@ environment:
       ARCH: "64"
 
 install:
+  - curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
   - conda config --add channels conda-forge
   - conda update conda -y
