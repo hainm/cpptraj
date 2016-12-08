@@ -6,7 +6,11 @@ package:
   version: {{ version }}
 
 source:
-    path: ../netcdf-4.3.3
+  path: $APPVEYOR_BUILD_FOLDER/netcdf-4.3.3
+ 
+build:
+  script_env:
+    - APPVEYOR_BUILD_FOLDER
 
 # requirements:
 #   build:

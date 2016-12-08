@@ -15,8 +15,15 @@ environment:
       ARCH: "64"
 
 install:
-  - curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip
-  - 7z x netcdf-4.3.3.zip > /dev/null
+   - "sh -lc \"
+      if [ ! -f /usr/local/lib/libnetcdf.a ]; then
+        curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip &&
+        7z x netcdf-4.3.3.zip -o$APPVEYOR_BUILD_FOLDER > /dev/null &&
+        cd $APPVEYOR_BUILD_FOLDER/netcdf-4.3.3 &&
+      else
+        echo 'Have Cached NetCDF';
+      fi
+   \""
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
   - conda config --add channels conda-forge
   - conda update conda -y
