@@ -16,7 +16,7 @@ environment:
 
 install:
   - curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip
-  - 7z x netcdf-4.3.3.zip > /dev/null &&
+  - 7z x netcdf-4.3.3.zip > /dev/null
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
   - conda config --add channels conda-forge
   - conda update conda -y
