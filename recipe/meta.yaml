@@ -1,7 +1,4 @@
 {% set name = "libcpptraj-dev" %}
-
-# original cpptraj internal version: '4.3.2'
-# add '.1' to the end for each pytraj release
 {% set version = os.getenv('VERSION', '4.3.2.1') %}
 
 package:
