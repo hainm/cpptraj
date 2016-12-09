@@ -36,6 +36,7 @@ install:
   - conda install mingwpy -y
   - python -c "import sys; print(sys.prefix)"
   - python --version
+  - git status
   # - "sh -lc \"
   #    if [ ! -f /usr/local/lib/libnetcdf.a ]; then
   #      curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip &&
