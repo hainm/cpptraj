@@ -52,6 +52,7 @@ install:
 test_script:
   # - "%CMD_IN_ENV% conda build netcdf433" 
   # - "%CMD_IN_ENV% conda build recipe" 
-  - "%CMD_IN_ENV% powershell -file 'recipe\\bld.bat'" 
+  - "%CMD_IN_ENV% bash configure -noreadline -nonetcdf gnu"
+  - "%CMD_IN_ENV% make"
 
 build: false
