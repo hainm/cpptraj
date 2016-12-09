@@ -28,12 +28,12 @@ install:
       diffutils
     \""
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
+  - conda update conda -y
+  - conda install conda-build -y
   - conda create -n py34 python=3.4 -y
   - activate py34
   - conda config --add channels conda-forge
   - conda install mingwpy -y
-  - conda update conda -y
-  - conda install conda-build -y
   - python -c "import sys; print(sys.prefix)"
   - python --version
   # - "sh -lc \"
