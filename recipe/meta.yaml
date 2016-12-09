@@ -23,7 +23,7 @@ requirements:
   run:
     - zlib
     - bzip2
-    - libnetcdf [libnetcdf]
+    - libnetcdf [linux]
     - openblas [linux]
     - libgfortran [linux]
     - gcc [linux]
