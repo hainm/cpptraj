@@ -15,7 +15,7 @@ requirements:
     - libnetcdf [linux]
     - openblas [linux]
     - libgfortran [linux]
-    - mingwpy
+    - mingwpy [win]
     - gcc [linux]
   run:
     - zlib
