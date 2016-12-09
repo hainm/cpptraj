@@ -28,10 +28,11 @@ install:
       diffutils
     \""
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
+  - conda create -n py34 python=3.4 -y
+  - source activate py34
   - conda config --add channels conda-forge
   - conda install mingwpy -y
   - conda update conda -y
-  - conda update --all -y
   - conda install conda-build -y
   - python -c "import sys; print(sys.prefix)"
   - python --version
@@ -50,6 +51,7 @@ install:
 
 test_script:
   # - "%CMD_IN_ENV% conda build netcdf433" 
-  - "%CMD_IN_ENV% conda build recipe" 
+  # - "%CMD_IN_ENV% conda build recipe" 
+  - "%CMD_IN_ENV% bash recipe/bld.bat" 
 
 build: false
