@@ -35,21 +35,21 @@ install:
   - conda install conda-build -y
   - python -c "import sys; print(sys.prefix)"
   - python --version
-  - "sh -lc \"
-     if [ ! -f /usr/local/lib/libnetcdf.a ]; then
-       curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip &&
-       7z x netcdf-4.3.3.zip -o$APPVEYOR_BUILD_FOLDER > /dev/null &&
-       cd $APPVEYOR_BUILD_FOLDER/netcdf-4.3.3 &&
-       exec 0</dev/null &&
-       ./configure --enable-static --disable-netcdf-4 --prefix=/usr/local/ --disable-dap &&
-       make -r install;
-     else
-       echo 'Have Cached NetCDF';
-     fi
-  \""
+  # - "sh -lc \"
+  #    if [ ! -f /usr/local/lib/libnetcdf.a ]; then
+  #      curl -fsS -o netcdf-4.3.3.zip ftp://ftp.unidata.ucar.edu/pub/netcdf/netcdf-4.3.3.zip &&
+  #      7z x netcdf-4.3.3.zip -o$APPVEYOR_BUILD_FOLDER > /dev/null &&
+  #      cd $APPVEYOR_BUILD_FOLDER/netcdf-4.3.3 &&
+  #      exec 0</dev/null &&
+  #      ./configure --enable-static --disable-netcdf-4 --prefix=/usr/local/ --disable-dap &&
+  #      make -r install;
+  #    else
+  #      echo 'Have Cached NetCDF';
+  #    fi
+  # \""
 
 test_script:
-  - "%CMD_IN_ENV% conda build netcdf433" 
+  # - "%CMD_IN_ENV% conda build netcdf433" 
   - "%CMD_IN_ENV% conda build recipe" 
 
 build: false

@@ -1,2 +1,2 @@
-./configure -noreadline gnu
+bash configure -noreadline -nonetcdf gnu
 make
