@@ -59,5 +59,6 @@ test_script:
   - "%CMD_IN_ENV% bash configure -noreadline -nonetcdf -nobzlib -nomathlib -shared gnu"
   - "%CMD_IN_ENV% make libcpptraj"
   - "%CMD_IN_ENV% make"
+  - ./bin/cpptraj.exe
 
 build: false
