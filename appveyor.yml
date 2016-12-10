@@ -51,7 +51,6 @@ test_script:
 
 after_build:
   - 7z a cpptraj-%APPVEYOR_BUILD_ID%.zip bin/* src/*.h lib/*
-  - find C:/msys64/usr/local
 
 artifacts:
   - path: cpptraj-$(APPVEYOR_BUILD_ID).zip
