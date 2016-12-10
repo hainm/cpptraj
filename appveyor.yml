@@ -47,6 +47,7 @@ build_script:
 
 test_script:
   - echo "nothing to test"
+  - echo "hello"
 
 after_build:
   - 7z a cpptraj-%APPVEYOR_BUILD_ID%.zip bin/* src/*.h lib/*
