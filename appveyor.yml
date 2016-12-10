@@ -49,7 +49,7 @@ test_script:
 
 build: off
 after_build:
-  - 7z a cpptraj-%APPVEYOR_BUILD_ID%.zip bin/ambpdb.exe bin/cpptraj.exe src/*.h lib/*
+  - 7z a cpptraj-%APPVEYOR_BUILD_ID%.zip bin/* src/*.h lib/*
   - find C:/msys64/usr/local
 
 artifacts:
