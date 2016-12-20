@@ -26,6 +26,7 @@ install:
   - python --version
   - conda install bzip2 -y
   - which g++
+  - which gfortran
 
 build_script:
   - "%CMD_IN_ENV% bash configure -noreadline -nonetcdf -nobzlib -nomathlib -shared gnu"
