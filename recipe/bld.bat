@@ -2,20 +2,15 @@ setlocal enableextensions enabledelayedexpansion
 
 @echo off
 
-:: Setting variables in Cygwin style
-set LIBRARY_INC_CW=!LIBRARY_INC:\=/!
-set LIBRARY_INC_CW=!LIBRARY_INC_CW::=!
-set LIBRARY_INC_CW=/%LIBRARY_INC_CW%
+set LIBRARY_PREFIX_CW=!LIBRARY_PREFIX:\=/!
+set LIBRARY_PREFIX_CW=!LIBRARY_PREFIX_CW::=!
+set LIBRARY_PREFIX_CW=/%LIBRARY_PREFIX_CW%
 
-set LIBRARY_LIB_CW=!LIBRARY_LIB:\=/!
-set LIBRARY_LIB_CW=!LIBRARY_LIB_CW::=!
-set LIBRARY_LIB_CW=/%LIBRARY_LIB_CW%
-
-bash configure --with-netcdf=%LIBRARY_INC_CW% ^
-               --with-blas=%LIBRARY_INC_CW% ^
+bash configure --with-netcdf=%LIBRARY_PREFIX_CW% ^
+               --with-blas=%LIBRARY_PREFIX_CW% ^
                -openblas ^
-               --with-bzlib=%LIBRARY_INC_CW% ^
-               --with-zlib=%LIBRARY_INC_CW% ^
+               --with-bzlib=%LIBRARY_PREFIX_CW% ^
+               --with-zlib=%LIBRARY_PREFIX_CW% ^
                -shared ^
                -noarpack ^
                gnu
