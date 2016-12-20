@@ -19,7 +19,8 @@ bash configure --with-netcdf=%PREFIX% ^
                -windows ^
                gnu
                ::--with-bzlib=%PREFIX% ^
-C:/msys64/usr/bin/make libcpptraj
-mkdir -p %PREFIX%/include/cpptraj/
-cp lib/libcpptraj* %PREFIX%/lib/
-cp src/*.h %PREFIX%/include/cpptraj/
+C:\msys64\usr\bin\make libcpptraj
+mkdir -p %LIBRARY_INC%\cpptraj\
+COPY bin\cpptraj.exe %LIBRARY_BIN%\
+COPY lib\libcpptraj.so %LIBRARY_LIB%\
+XCOPY src\*.h   %LIBRARY_INC%\cpptraj
