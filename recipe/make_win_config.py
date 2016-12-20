@@ -71,4 +71,4 @@ with open('testp.cpp', 'w') as fh:
     """.strip())
 
 subprocess.call('ls {}'.format(include_dir), shell=True)
-subprocess.call('g++ -I{include_dir} -o testp testp.cpp'.format(include_dir=include_dir), shell=True)
+subprocess.call('g++ -I{include_dir} -o testp -lnetcdf -L{lib_dir} testp.cpp'.format(include_dir=include_dir, lib_dir=lib_dir), shell=True)
