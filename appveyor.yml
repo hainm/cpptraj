@@ -19,7 +19,7 @@ install:
   - conda update conda -y
   - conda install conda-build -y
   - conda config --add channels conda-forge
-  - conda config --add channel menpo
+  - conda config --add channels menpo
   - python --version
 
 build_script:
