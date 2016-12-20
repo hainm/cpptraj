@@ -63,12 +63,12 @@ with open('config.h', 'w') as fh:
         lib_dir=lib_dir))
 
 with open('testp.cpp', 'w') as fh:
-    fh.write("""
+    fh.write('''
     #include <cstdio>
     #include "netcdf.h"
     void unused() {int ncid; nc_open("foo.nc", 0, &ncid);}
     int main() { printf("Testing\n"); printf("%s\n",nc_strerror(0)); return 0; }
-    """.strip())
+    '''.strip())
 
 subprocess.call('ls {}'.format(include_dir), shell=True)
 subprocess.call('g++ -I{include_dir} -o testp -lnetcdf -L{lib_dir} testp.cpp'.format(include_dir=include_dir, lib_dir=lib_dir), shell=True)
