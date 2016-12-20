@@ -70,4 +70,4 @@ with open('testp.cpp', 'w') as fh:
     int main() { printf("Testing\n"); printf("%s\n",nc_strerror(0)); return 0; }
     """.strip())
 
-subprocess.call('g++ {include} -o testp testp.cpp'.format(include=include), shell=True)
+subprocess.call('g++ {include_dir} -o testp testp.cpp'.format(include_dir=include_dir), shell=True)
