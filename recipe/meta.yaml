@@ -32,6 +32,10 @@ requirements:
     - libgfortran [linux]
     - gcc [linux]
 
+test:
+  commands:
+    - cpptraj -h
+
 about:
     home: https://github.com/amber-md/cpptraj/
     license: GPL v3
