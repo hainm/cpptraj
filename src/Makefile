@@ -26,7 +26,7 @@ cpptraj$(SFX)$(EXE): $(OBJECTS) $(FFT_DEPEND) $(READLINE_TARGET) $(CUDA_TARGET) 
 
 # AmbPDB -------------------------------
 install_ambpdb: ambpdb$(EXE)
-	mv ambpdb$(EXE) $(CPPTRAJBIN)
+	# mv ambpdb$(EXE) $(CPPTRAJBIN)
 
 ambpdb$(EXE): $(AMBPDB_OBJECTS) $(XDRFILE_TARGET)
 	$(CXX) -o $(CPPTRAJBIN)/ambpdb$(EXE) $(AMBPDB_OBJECTS) $(LDFLAGS)
