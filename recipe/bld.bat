@@ -6,7 +6,8 @@ set PREFIX=!LIBRARY_PREFIX:\=/!
 set PREFIX=!PREFIX::=!
 set PREFIX=/%PREFIX%
 
-ls %PREFIX%\include
+@echo "ls netcdf.h"
+ls %PREFIX%\include\netcdf.h
 
 bash configure --with-netcdf=%PREFIX% ^
                --with-blas=%PREFIX% ^
