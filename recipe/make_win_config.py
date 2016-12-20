@@ -42,7 +42,7 @@ include_dir = os.getenv('LIBRARY_INC')
 lib_dir = os.getenv('LIBRARY_LIB')
 cpptraj_home = os.getcwd()
 cpptraj_bin = os.path.join(cpptraj_home, 'bin')
-cpptraj_bin = os.path.join(cpptraj_home, 'lib')
+cpptraj_lib = os.path.join(cpptraj_home, 'lib')
 
 try:
     os.mkdir('lib')
