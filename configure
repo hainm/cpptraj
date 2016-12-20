@@ -687,12 +687,13 @@ while [[ ! -z $1 ]] ; do
       ;;
     "-windows")
       printf "WINDOWS support requested. Implies -static."
-      READLINE_TARGET="noreadline"
+      # READLINE_TARGET="noreadline"
       STATIC=1
       WINDOWS="yes"
       uname | grep -i linux > /dev/null 2>&1
       if [ $? -eq 0 ]; then
         echo " Detected cross-compilation."
+        CROSS_COMPILE="yes"
       else
         echo " Native windows build."
         quadmath="-lquadmath"
