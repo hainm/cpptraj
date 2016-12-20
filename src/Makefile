@@ -29,7 +29,7 @@ install_ambpdb: ambpdb$(EXE)
 	mv ambpdb$(EXE) $(CPPTRAJBIN)
 
 ambpdb$(EXE): $(AMBPDB_OBJECTS) $(XDRFILE_TARGET)
-	$(CXX) -o ambpdb$(EXE) $(AMBPDB_OBJECTS) $(LDFLAGS)
+	$(CXX) -o $(CPPTRAJBIN)/ambpdb$(EXE) $(AMBPDB_OBJECTS) $(LDFLAGS)
 
 # libcpptraj ---------------------------
 # Rule to make libcpptraj-specific objects
