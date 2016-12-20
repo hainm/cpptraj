@@ -2,22 +2,22 @@ setlocal enableextensions enabledelayedexpansion
 
 @echo off
 
-set LIBRARY_PREFIX_CW=!LIBRARY_PREFIX:\=/!
-set LIBRARY_PREFIX_CW=!LIBRARY_PREFIX_CW::=!
-set LIBRARY_PREFIX_CW=/%LIBRARY_PREFIX_CW%
+set PREFIX=!LIBRARY_PREFIX:\=/!
+set PREFIX=!PREFIX::=!
+set PREFIX=/%PREFIX%
 
-ls %LIBRARY_PREFIX_CW%\include
+ls %PREFIX%\include
 
-bash configure --with-netcdf=%LIBRARY_PREFIX_CW% ^
-               --with-blas=%LIBRARY_PREFIX_CW% ^
+bash configure --with-netcdf=%PREFIX% ^
+               --with-blas=%PREFIX% ^
                -openblas ^
                -nobzlib ^
-               --with-zlib=%LIBRARY_PREFIX_CW% ^
+               --with-zlib=%PREFIX% ^
                -shared ^
                -noarpack ^
                -windows ^
                gnu
-               ::--with-bzlib=%LIBRARY_PREFIX_CW% ^
+               ::--with-bzlib=%PREFIX% ^
 C:/msys64/usr/bin/make libcpptraj
 mkdir -p %PREFIX%/include/cpptraj/
 cp lib/libcpptraj* %PREFIX%/lib/
