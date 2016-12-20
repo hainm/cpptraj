@@ -1,4 +1,14 @@
-%PYTHON% %RECIPE_DIR%\make_win_config.py
+bash configure --with-netcdf=%PREFIX% ^
+               --with-blas=%PREFIX% ^
+               -openblas ^
+               -nobzlib ^
+               --with-zlib=%PREFIX% ^
+               -shared ^
+               -noarpack ^
+               -windows ^
+               gnu
+
+:: %PYTHON% %RECIPE_DIR%\make_win_config.py
 C:\msys64\usr\bin\make libcpptraj
 
 mkdir -p %LIBRARY_INC%\cpptraj\
