@@ -514,12 +514,10 @@ USEMKL=0
 FLIBS=""
 HDF5LIB="" #"-lhdf5_hl -lhdf5"
 WINDOWS="no"
-# CROSS_COMPILE="no"
+CROSS_COMPILE="no"
 USECUDA=0
 CUDA_TARGET=""
 CLEAN='yes' # Clean source directory if configure is successful
-
-echo ${CROSS_COMPILE}
 
 # Private variables
 quadmath=""
@@ -695,12 +693,12 @@ while [[ ! -z $1 ]] ; do
       uname | grep -i linux > /dev/null 2>&1
       if [ $? -eq 0 ]; then
         echo " Detected cross-compilation."
-        CROSS_COMPILE="yes"
       else
         echo " Native windows build."
         quadmath="-lquadmath"
       fi
       EXE=".exe"
+      CROSS_COMPILE="yes"
       ;;
     "-openblas")
       echo "Using OpenBLAS"
