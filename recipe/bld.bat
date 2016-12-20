@@ -11,12 +11,13 @@ ls %LIBRARY_PREFIX_CW%\include
 bash configure --with-netcdf=%LIBRARY_PREFIX_CW% ^
                --with-blas=%LIBRARY_PREFIX_CW% ^
                -openblas ^
-               --with-bzlib=%LIBRARY_PREFIX_CW% ^
+               -nobzlib ^
                --with-zlib=%LIBRARY_PREFIX_CW% ^
                -shared ^
                -noarpack ^
                -windows ^
                gnu
+               ::--with-bzlib=%LIBRARY_PREFIX_CW% ^
 C:/msys64/usr/bin/make libcpptraj
 mkdir -p %PREFIX%/include/cpptraj/
 cp lib/libcpptraj* %PREFIX%/lib/
