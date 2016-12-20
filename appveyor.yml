@@ -21,15 +21,15 @@ install:
   - conda create -n py34 python=3.4 -y
   - activate py34
   - conda config --add channels conda-forge
-  - conda install mingwpy -y
-  - python -c "import sys; print(sys.prefix)"
+  - conda install mingwpy openblas -y
+  - set PREFIX=`python -c "import sys; print(sys.prefix)"`
   - python --version
   - conda install bzip2 -y
   - which g++
   - which gfortran
 
 build_script:
-  - "%CMD_IN_ENV% bash configure -noreadline -nonetcdf -nobzlib -nomathlib -shared gnu"
+  - "%CMD_IN_ENV% bash configure -noreadline -nonetcdf -nobzlib -openblas --with-blas=%PREFIX% -shared gnu"
   - "%CMD_IN_ENV% C:/msys64/usr/bin/make libcpptraj"
   - "%CMD_IN_ENV% C:/msys64/usr/bin/make"
 
