@@ -24,6 +24,7 @@ install:
   - conda install mingwpy -y
   - conda install openblas -c menpo -y
   - set PREFIX="C:/Miniconda3-x64/envs/py34"
+  - set ls C:/Miniconda3-x64/envs/py34/lib/lib*
   - python --version
   - conda install bzip2 -y
   - which g++
