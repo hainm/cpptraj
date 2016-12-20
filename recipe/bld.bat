@@ -19,7 +19,8 @@ bash configure --with-netcdf=%PREFIX% ^
                -noarpack ^
                -windows ^
                gnu
-               ::--with-bzlib=%PREFIX% ^
+               ::--with-bzlib=%PREFIX%
+
 C:\msys64\usr\bin\make libcpptraj
 mkdir -p %LIBRARY_INC%\cpptraj\
 COPY bin\cpptraj.exe %LIBRARY_BIN%\
