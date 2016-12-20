@@ -15,18 +15,6 @@ environment:
       ARCH: "64"
 
 install:
-  - set HOME=.
-  - set MSYSTEM=MINGW64
-  - set PATH=C:/msys64/usr/bin;C:/msys64/mingw64/bin;%PATH%
-  - "sh -lc \"pacman -S --noconfirm --needed
-      mingw-w64-x86_64-openblas
-      mingw-w64-x86_64-arpack
-      mingw-w64-x86_64-gcc
-      mingw-w64-x86_64-gcc-fortran
-      mingw-w64-x86_64-ncurses
-      mingw-w64-x86_64-readline
-      diffutils
-    \""
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
   - conda update conda -y
   - conda install conda-build -y
@@ -37,8 +25,6 @@ install:
   - python -c "import sys; print(sys.prefix)"
   - python --version
   - conda install bzip2 -y
-  - where g++
-  - g++ -v
 
 build_script:
   - "%CMD_IN_ENV% bash configure -noreadline -nonetcdf -nobzlib -nomathlib -shared gnu"
