@@ -63,5 +63,5 @@ with open('config.h', 'w') as fh:
         lib_dir=lib_dir))
 
 subprocess.call('ls {}'.format(include_dir), shell=True)
-test_file = os.path.join((os.getenv('RECIPE_DIR'), 'testp.cpp'))
+test_file = os.path.join(os.getenv('RECIPE_DIR'), 'testp.cpp')
 subprocess.call('g++ -I{include_dir} -o testp -lnetcdf -L{lib_dir} {test_file}'.format(include_dir=include_dir, lib_dir=lib_dir, test_file=test_file), shell=True)
