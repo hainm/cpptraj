@@ -55,4 +55,4 @@ with open('config.h', 'w') as fh:
         cpptraj_bin=cpptraj_bin,
         cpptraj_lib=cpptraj_lib,
         include_dir=include_dir,
-        lib_dir=lib_dir)
+        lib_dir=lib_dir))
