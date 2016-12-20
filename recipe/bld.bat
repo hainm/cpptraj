@@ -9,6 +9,7 @@ set PREFIX=/%PREFIX%
 @echo "ls netcdf.h"
 ls %PREFIX%\include\netcdf.h
 
+CROSS_COMPILE=yes ^
 bash configure --with-netcdf=%PREFIX% ^
                --with-blas=%PREFIX% ^
                -openblas ^
