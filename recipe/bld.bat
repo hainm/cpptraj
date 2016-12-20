@@ -1,4 +1,6 @@
-bash configure --with-netcdf=%PREFIX% ^
+%PYTHON% %RECIPE_DIR%\update_configure_win.py
+
+bash configure2 --with-netcdf=%PREFIX% ^
                --with-blas=%PREFIX% ^
                -openblas ^
                -nobzlib ^
