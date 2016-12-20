@@ -15,6 +15,7 @@ environment:
       ARCH: "64"
 
 install:
+  - rm C:\Program Files\Git\usr\bin\mv.exe
   - set PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%
   - conda update conda -y
   - conda install conda-build -y
