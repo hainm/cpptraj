@@ -32,8 +32,10 @@ XDRFILE_TARGET=xdrfile/libxdrfile.a
 FFT_DEPEND=pub_fft.o
 FFT_LIB=pub_fft.o
 
-CPPTRAJ_LIB=  -L{lib_dir} -lopenblas -lgfortran -w
-LDFLAGS=-L{lib_dir} -lnetcdf -lbz2 -lz xdrfile/libxdrfile.a 
+# CPPTRAJ_LIB=  -L{lib_dir} -lopenblas -lgfortran -w
+# LDFLAGS=-L{lib_dir} -lnetcdf -lbz2 -lz xdrfile/libxdrfile.a 
+CPPTRAJ_LIB=  -L{lib_dir} -lgfortran -w
+LDFLAGS=-L{lib_dir} -lnetcdf -lz xdrfile/libxdrfile.a 
 SFX=
 EXE=
 """
