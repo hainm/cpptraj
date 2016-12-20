@@ -719,7 +719,7 @@ while [[ ! -z $1 ]] ; do
       echo "Using ZLIB in $ZLIB_HOME"
       ;;
     "--with-netcdf" )
-      INCLUDE="$INCLUDE -I$VALUE\include"
+      INCLUDE="$INCLUDE -I$VALUE/include"
       NETCDF_HOME="$VALUE"
       echo "Using NetCDF in $NETCDF_HOME"
       ;;
