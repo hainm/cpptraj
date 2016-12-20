@@ -12,16 +12,16 @@ requirements:
   build:
     - zlib
     - bzip2
-    - libnetcdf [linux]
-    - openblas [linux]
+    - libnetcdf [linux or win]
+    - openblas [linux or win]
     - libgfortran [linux]
     - mingwpy [win]
     - gcc [linux]
   run:
     - zlib
     - bzip2
-    - libnetcdf [linux]
-    - openblas [linux]
+    - libnetcdf [linux or win]
+    - openblas [linux or win]
     - libgfortran [linux]
     - gcc [linux]
 
