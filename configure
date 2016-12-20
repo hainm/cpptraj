@@ -698,7 +698,7 @@ while [[ ! -z $1 ]] ; do
         quadmath="-lquadmath"
       fi
       EXE=".exe"
-      CROSS_COMPILE="yes"
+      SHARED_SUFFIX='.dll.a'
       ;;
     "-openblas")
       echo "Using OpenBLAS"
