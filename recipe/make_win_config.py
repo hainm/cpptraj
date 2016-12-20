@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 config_template = """
 CPPTRAJHOME={cpptraj_home}
@@ -36,8 +37,7 @@ FFT_DEPEND=pub_fft.o
 FFT_LIB=pub_fft.o
 
 CPPTRAJ_LIB=  -L{lib_dir} -lopenblas -lgfortran -w
-# LDFLAGS=-L{lib_dir} -lnetcdf -lbz2 -lz xdrfile/libxdrfile.a 
-# CPPTRAJ_LIB=  -L{lib_dir} -lgfortran -w
+CPPTRAJ_LIB=  -L{lib_dir} -lmkl -lgfortran -w
 LDFLAGS=-L{lib_dir} -lnetcdf -lz xdrfile/libxdrfile.a 
 SFX=
 EXE=
@@ -61,3 +61,13 @@ with open('config.h', 'w') as fh:
         cpptraj_lib=cpptraj_lib,
         include_dir=include_dir,
         lib_dir=lib_dir))
+
+with open('testp.cpp', 'w') as fh:
+    fh.write("""
+    #include <cstdio>
+    #include "netcdf.h"
+    void unused() {int ncid; nc_open("foo.nc", 0, &ncid);}
+    int main() { printf("Testing\n"); printf("%s\n",nc_strerror(0)); return 0; }
+    """.strip())
+
+subprocess.call('g++ {include} -o testp testp.cpp'.format(include=include), shell=True)

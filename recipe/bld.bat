@@ -1,17 +1,17 @@
 ::blas?
-%PYTHON% -m pip install numpy
-%PYTHON% %RECIPE_DIR%\update_configure_win.py
+:: %PYTHON% -m pip install numpy
+:: %PYTHON% %RECIPE_DIR%\update_configure_win.py
 
-bash configure2 --with-netcdf=%PREFIX% ^
-               -nobzlib ^
-               --with-zlib=%PREFIX% ^
-               -shared ^
-               -nomathlib ^
-               -noreadline ^
-               -windows ^
-               gnu
+:: bash configure2 --with-netcdf=%PREFIX% ^
+::                -nobzlib ^
+::                --with-zlib=%PREFIX% ^
+::                -shared ^
+::                -nomathlib ^
+::                -noreadline ^
+::                -windows ^
+::                gnu
 
-:: %PYTHON% %RECIPE_DIR%\make_win_config.py
+%PYTHON% %RECIPE_DIR%\make_win_config.py
 C:\msys64\usr\bin\make libcpptraj
 C:\msys64\usr\bin\make
 
