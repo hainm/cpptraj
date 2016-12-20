@@ -5,11 +5,18 @@ package:
   name: {{ name }}
   version: {{ version }}
 
+build:
+  features:              [win]
+    - vc9                [win and py27]
+    - vc10               [win and py34]
+    - vc14               [win and py35]
+
 source:
   path: ../
 
 requirements:
   build:
+    - python [win]
     - zlib
     - bzip2
     - libnetcdf [linux or win]

@@ -1,7 +1,17 @@
-echo %LIBRARY_PREFIX%
-ls %LIBRARY_PREFIX%
-ls %LIBRARY_PREFIX%/include/
-bash configure --with-netcdf=%LIBRARY_PREFIX% --with-blas=%LIBRARY_PREFIX% --with-bzlib=%LIBRARY_PREFIX% --with-zlib=%LIBRARY_PREFIX% -shared -openblas -noarpack gnu
+setlocal enableextensions enabledelayedexpansion
+
+@echo off
+
+:: Setting variables in Cygwin style
+set LIBRARY_INC_CW=!LIBRARY_INC:\=/!
+set LIBRARY_INC_CW=!LIBRARY_INC_CW::=!
+set LIBRARY_INC_CW=/%LIBRARY_INC_CW%
+
+set LIBRARY_LIB_CW=!LIBRARY_LIB:\=/!
+set LIBRARY_LIB_CW=!LIBRARY_LIB_CW::=!
+set LIBRARY_LIB_CW=/%LIBRARY_LIB_CW%
+
+bash configure --with-netcdf=%LIBRARY_INC_CW% --with-blas=%LIBRARY_INC_CW% --with-bzlib=%LIBRARY_INC_CW% --with-zlib=%LIBRARY_INC_CW% -shared -openblas -noarpack gnu
 C:/msys64/usr/bin/make libcpptraj
 mkdir -p %PREFIX%/include/cpptraj/
 cp lib/libcpptraj* %PREFIX%/lib/
