@@ -21,7 +21,8 @@ install:
   - conda create -n py34 python=3.4 -y
   - activate py34
   - conda config --add channels conda-forge
-  - conda install mingwpy openblas -y
+  - conda install mingwpy -y
+    # - conda install openblas -c -y
   - set PREFIX=`python -c "import sys; print(sys.prefix)"`
   - python --version
   - conda install bzip2 -y
