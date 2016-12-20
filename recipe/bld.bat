@@ -6,6 +6,8 @@ set LIBRARY_PREFIX_CW=!LIBRARY_PREFIX:\=/!
 set LIBRARY_PREFIX_CW=!LIBRARY_PREFIX_CW::=!
 set LIBRARY_PREFIX_CW=/%LIBRARY_PREFIX_CW%
 
+ls %LIBRARY_PREFIX_CW%\include
+
 bash configure --with-netcdf=%LIBRARY_PREFIX_CW% ^
                --with-blas=%LIBRARY_PREFIX_CW% ^
                -openblas ^
