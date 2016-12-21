@@ -20,7 +20,7 @@ requirements:
     - zlib
     - bzip2
     - libnetcdf [linux or win]
-    - netcdf-4 [win]
+    - netcdf4 [win]
     - openblas [linux or win]
     - libgfortran [linux]
     - mingwpy [win]
@@ -29,7 +29,7 @@ requirements:
     - zlib
     - bzip2
     - libnetcdf [linux or win]
-    - netcdf-4 [win]
+    - netcdf4 [win]
     - openblas [linux or win]
     - libgfortran [linux]
     - gcc [linux]
