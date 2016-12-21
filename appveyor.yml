@@ -23,6 +23,7 @@ install:
   - python --version
 
 build_script:
+  - "%CMD_IN_ENV% conda build libnetcdf-feedstock/recipe --py 3.4"
   # - "%CMD_IN_ENV% conda build openblas"
   - "%CMD_IN_ENV% conda build recipe --py 3.4"
   # - "%CMD_IN_ENV% C:/msys64/usr/bin/make libcpptraj"
