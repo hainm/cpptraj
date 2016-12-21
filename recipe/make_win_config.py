@@ -45,6 +45,7 @@ EXE=
 
 include_dir = os.getenv('LIBRARY_INC')
 lib_dir = os.getenv('LIBRARY_LIB')
+lib_prefix = os.getenv('LIBRARY_PREFIX')
 cpptraj_home = os.getcwd()
 cpptraj_bin = os.path.join(cpptraj_home, 'bin')
 cpptraj_lib = os.path.join(cpptraj_home, 'lib')
@@ -65,6 +66,7 @@ with open('config.h', 'w') as fh:
 subprocess.call('ls {}'.format(include_dir), shell=True)
 subprocess.call('ls {}'.format(lib_dir), shell=True)
 test_file = os.path.join(os.getenv('RECIPE_DIR'), 'testp.cpp')
-command = 'g++ -I{include_dir} -o testp -lnetcdf -L{lib_dir} {test_file}'.format(include_dir=include_dir, lib_dir=lib_dir, test_file=test_file)
+# command = 'g++ -I{include_dir} -o testp -lnetcdf -L{lib_dir} {test_file}'.format(include_dir=include_dir, lib_dir=lib_dir, test_file=test_file)
+command = 'g++ -I{include_dir} -o testp -lnetcdf -L{lib_dir} {test_file}'.format(include_dir=include_dir, lib_dir=lib_prefix, test_file=test_file)
 print('command', command)
 subprocess.call(command, shell=True)
