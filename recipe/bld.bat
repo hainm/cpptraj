@@ -1,16 +1,13 @@
-REM %PYTHON% -m pip install numpy
-REM %PYTHON% %RECIPE_DIR%\update_configure_win.py
+bash configure --with-netcdf=%PREFIX%\Library ^
+               -nobzlib ^
+               --with-zlib=%PREFIX%\Library ^
+               -shared ^
+               -nomathlib ^
+               -noreadline ^
+               -windows ^
+               gnu
 
-REM bash configure2 --with-netcdf=%PREFIX% ^
-REM                -nobzlib ^
-REM                --with-zlib=%PREFIX% ^
-REM                -shared ^
-REM                -nomathlib ^
-REM                -noreadline ^
-REM                -windows ^
-REM                gnu
-
-%PYTHON% %RECIPE_DIR%\make_win_config.py
+:: %PYTHON% %RECIPE_DIR%\make_win_config.py
 
 C:\msys64\usr\bin\make libcpptraj
 REM C:\msys64\usr\bin\make
