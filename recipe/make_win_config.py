@@ -39,11 +39,10 @@ SFX=
 EXE=
 """
 
-include_dir = os.getenv('LIBRARY_INC')
+include_dir = os.getenv('LIBRARY_INC', os.path.join(sys.prefix, 'Library', 'include'))
 # lib_dir = os.getenv('LIBRARY_LIB')
 # yeah, weird, right? netcdf.dll is bin folder
-lib_dir = lib_bin = os.getenv('LIBRARY_BIN')
-lib_prefix = os.getenv('LIBRARY_PREFIX')
+lib_dir = os.getenv('LIBRARY_BIN', os.path.join(sys.prefix, 'Library', 'bin'))
 cpptraj_home = os.getcwd()
 cpptraj_bin = os.path.join(cpptraj_home, 'bin')
 cpptraj_lib = os.path.join(cpptraj_home, 'lib')
