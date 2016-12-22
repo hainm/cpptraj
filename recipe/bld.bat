@@ -13,7 +13,7 @@ REM                gnu
 %PYTHON% %RECIPE_DIR%\make_win_config.py
 
 C:\msys64\usr\bin\make libcpptraj
-C:\msys64\usr\bin\make
+REM C:\msys64\usr\bin\make
 
 mkdir -p %LIBRARY_INC%\cpptraj\
 COPY bin\cpptraj.exe %LIBRARY_BIN%\
