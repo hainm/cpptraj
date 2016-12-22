@@ -20,6 +20,7 @@ requirements:
     - pkg-config  # [unix]
     - msinttypes  # [win]
     - mingwpy # [win]
+    - m4 # [win]
     - curl
     - zlib 1.2.*
     - hdf4

@@ -20,6 +20,7 @@ install:
   - conda install conda-build -y
   - conda config --add channels conda-forge
   - conda config --add channels menpo
+  - conda config --add channels msys2
   - python --version
 
 build_script:
