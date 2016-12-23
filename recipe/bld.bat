@@ -8,9 +8,9 @@ set PREFIX_CW=!PREFIX_CW::=!
 set PREFIX_CW=/%PREFIX_CW%
 
 %PYTHON% %RECIPE_DIR%/update_configure_win.py
-bash configure2 --with-netcdf=%PREFIX%/Library ^
+bash configure2 --with-netcdf=%PREFIX_CW%/Library ^
                -nobzlib ^
-               --with-zlib=%PREFIX%/Library ^
+               --with-zlib=%PREFIX_CW%/Library ^
                -shared ^
                -nomathlib ^
                -noreadline ^
