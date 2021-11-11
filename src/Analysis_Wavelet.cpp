@@ -145,7 +145,7 @@ Analysis::RetType Analysis_Wavelet::Setup(ArgList& analyzeArgs, AnalysisSetup& s
                                           analyzeArgs );
   }
   // Atom mask
-  mask_.SetMaskString( analyzeArgs.GetMaskNext() );
+  if (mask_.SetMaskString( analyzeArgs.GetMaskNext() )) return Analysis::ERR;
   // Set up output data set
   output_ = setup.DSL().AddSet( DataSet::MATRIX_FLT, setname, "WAVELET" );
   if (output_ == 0) return Analysis::ERR;
@@ -303,7 +303,7 @@ Analysis::RetType Analysis_Wavelet::Analyze() {
   PubFFT pubfft;
   pubfft.SetupFFTforN( nframes );
   mprintf("\tMemory required for scaled wavelet array: %s\n",
-          ByteString(2 * nframes * nb_ * sizeof(double), BYTE_DECIMAL).c_str());
+          ByteString(2 * (size_t)nframes * (size_t)nb_ * sizeof(double), BYTE_DECIMAL).c_str());
   typedef std::vector<ComplexArray> WaveletArray;
   WaveletArray FFT_of_Scaled_Wavelets;
   FFT_of_Scaled_Wavelets.reserve( nb_ );
@@ -365,11 +365,23 @@ Analysis::RetType Analysis_Wavelet::Analyze() {
   Darray magnitude( nframes ); // Scratch space for calculating magnitude across rows
   int at;
   int iterations = 0;
+  PubFFT* MyPubfft = &pubfft;
 # ifdef _OPENMP
+  // For OMP, every other thread will need its own PubFFT. The memory
+  // allocation/free has to happen outside the OpenMP parallel block for
+  // FFTW to work properly.
+  std::vector<PubFFT*> pubfft_thread(numthreads_);
+  pubfft_thread[0] = &pubfft;
+  for (int i = 1; i < numthreads_; i++) {
+    pubfft_thread[i] = new PubFFT();
+    pubfft_thread[i]->SetupFFTforN( nframes );
+  }
   ParallelProgress progress( natoms / numthreads_ );
-# pragma omp parallel private(at) firstprivate(progress, iterations, magnitude, pubfft)
+# pragma omp parallel private(at,MyPubfft) firstprivate(progress, iterations, magnitude)
   {
-  progress.SetThread( omp_get_thread_num() );
+  int mythread = omp_get_thread_num();
+  progress.SetThread( mythread );
+  MyPubfft = pubfft_thread[mythread];
 # pragma omp for
 # else /* Not OpenMP */
   ParallelProgress progress( natoms );
@@ -393,7 +405,7 @@ Analysis::RetType Analysis_Wavelet::Analyze() {
 #   endif
     double var_norm = 1.0 / d_var;
     // Calculate FT of atom signal
-    pubfft.Forward( AtomSignal );
+    MyPubfft->Forward( AtomSignal );
 #   ifdef DEBUG_WAVELET
     PrintComplex("AtomSignal", AtomSignal);
 #   endif
@@ -403,7 +415,7 @@ Analysis::RetType Analysis_Wavelet::Analyze() {
     for (int iscale = 0; iscale != nb_; iscale++) {
       ComplexArray dot = AtomSignal.TimesComplexConj( FFT_of_Scaled_Wavelets[iscale] );
       // Inverse FT of dot product
-      pubfft.Back( dot );
+      MyPubfft->Back( dot );
 #     ifdef DEBUG_WAVELET
       PrintComplex("InverseFT_Dot", dot);
 #     endif
@@ -430,6 +442,8 @@ Analysis::RetType Analysis_Wavelet::Analyze() {
   } // END loop over atoms
 # ifdef _OPENMP
   } // END pragma omp parallel
+  for (int i = 1; i < numthreads_; i++)
+    delete pubfft_thread[i];
 # endif
 # ifdef DEBUG_WAVELET 
   // DEBUG: Print MAX
@@ -506,7 +520,7 @@ int Analysis_Wavelet::WAFEX(DataSet_MatrixFlt const& matrix) {
       // Set up trajectory file
       int nframes = CL->MaxCol() - CL->MinCol() + 1;
       Trajout_Single clusterout;
-      if (clusterout.PrepareTrajWrite(cfilename, ArgList(), regionTop,
+      if (clusterout.PrepareTrajWrite(cfilename, ArgList(), DataSetList(), regionTop,
                                       CoordinateInfo(), nframes, TrajectoryFile::PDBFILE))
         return Analysis::ERR;
       // Setup frame for region
@@ -541,7 +555,7 @@ int Analysis_Wavelet::WAFEX(DataSet_MatrixFlt const& matrix) {
     // Write topology
     if (!overlayParm_.empty()) {
       ParmFile pfile;
-      if ( pfile.WriteTopology(*maskTop, overlayParm_, ParmFile::AMBERPARM, 0) )
+      if ( pfile.WriteTopology(*maskTop, overlayParm_, ParmFile::UNKNOWN_PARM, 0) )
         mprinterr("Error: Could not write out topology to file %s\n", overlayParm_.c_str());
     }
     // Write PDB trajectory
@@ -550,6 +564,7 @@ int Analysis_Wavelet::WAFEX(DataSet_MatrixFlt const& matrix) {
     int nframes = (int)coords_->Size();
     Trajout_Single overlay;
     if (overlay.PrepareTrajWrite(overlayName_, "title 'Wavelet trajectory'",
+                                 DataSetList(),
                                  maskTop, CoordinateInfo(), nframes,
                                  TrajectoryFile::UNKNOWN_TRAJ))
       return Analysis::ERR; 

@@ -3,6 +3,7 @@
 #include "CpptrajStdio.h"
 #include "DistRoutines.h"
 #include "Constants.h" // DEGRAD
+#include "DataSet_1D.h"
 
 // CONSTRUCTOR
 Action_Matrix::Action_Matrix() :
@@ -95,7 +96,7 @@ Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int d
       return Action::ERR;
     }
     for ( DataSetList::const_iterator DS = init.DSL().begin(); DS != init.DSL().end(); ++DS) {
-      if ( (*DS)->Type() == DataSet::VECTOR && (*DS)->Meta().ScalarType() == MetaData::IREDVEC )
+      if ( (*DS)->Group() == DataSet::VECTOR_1D && (*DS)->Meta().ScalarType() == MetaData::IREDVEC )
         IredVectors_.push_back( (DataSet_Vector*)*DS );
     }
     if (IredVectors_.empty()) {
@@ -112,7 +113,7 @@ Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int d
     }
   } else {
     // Get masks if not IRED/DIHCOVAR
-    mask1_.SetMaskString( actionArgs.GetMaskNext() );
+    if (mask1_.SetMaskString( actionArgs.GetMaskNext() )) return Action::ERR;
     std::string maskexpr = actionArgs.GetMaskNext();
     if (!maskexpr.empty()) useMask2_ = true;
     if ( useMask2_ && (mtype == MetaData::IDEA || mtype == MetaData::DISTCOVAR) )
@@ -123,14 +124,23 @@ Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int d
       return Action::ERR;
     }
     if (useMask2_) {
-      mask2_.SetMaskString( maskexpr );
+      if (mask2_.SetMaskString( maskexpr )) return Action::ERR;
       mkind = DataSet_2D::FULL;
     }
   }
+  // Set up output file if needed
+  outfile_ = 0;
+  if (outtype_ != BYMASK)
+    outfile_ = init.DFL().AddDataFile(outfilename, "square2d noxcol noheader", actionArgs);
+  // Check for output set name if not yet provided, to match
+  // behavior of other actions.
+  if (name.empty())
+    name = actionArgs.GetStringNext();
 
   // Create matrix BYATOM DataSet
   Mat_ = (DataSet_MatrixDbl*)init.DSL().AddSet(DataSet::MATRIX_DBL,
-                                         MetaData(name, MetaData::M_MATRIX, mtype), "Mat");
+                                               MetaData(name, MetaData::M_MATRIX, mtype),
+                                               "Mat");
   if (Mat_ == 0) return Action::ERR;
   // NOTE: Type/Kind is set here so subsequent analyses/actions know about it.
   Mat_->SetMatrixKind( mkind );
@@ -139,7 +149,6 @@ Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int d
   Mat_->ModifyDim(Dimension::X).SetLabel("Atom");
   // Determine what will be output.
   matByRes_ = 0;
-  outfile_ = 0;
   byMaskOut_ = 0;
   if (outtype_ == BYMASK) {
     // BYMASK output - no final data set, just write to file/STDOUT.
@@ -160,7 +169,6 @@ Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int d
       matByRes_->SetNeedsSync( false );
 #     endif
     } 
-    outfile_ = init.DFL().AddDataFile(outfilename, actionArgs);
     if (outfile_ != 0) {
       if (outtype_ == BYATOM)
         outfile_->AddDataSet( Mat_ );
@@ -182,10 +190,10 @@ Action::RetType Action_Matrix::Init(ArgList& actionArgs, ActionInit& init, int d
       mprintf("\tAverages will not be mass-weighted.\n");
   }
   if (mtype == MetaData::IREDMAT)
-    mprintf("\t%u IRED vecs, Order of Legendre polynomials: %i\n",
+    mprintf("\t%zu IRED vecs, Order of Legendre polynomials: %i\n",
             IredVectors_.size(), order_);
   else if (mtype == MetaData::DIHCOVAR)
-    mprintf("\t%u data sets.\n", DihedralSets_.size());
+    mprintf("\t%zu data sets.\n", DihedralSets_.size());
   if (outfile_ != 0)
     mprintf("\tPrinting to file %s\n", outfile_->DataFilename().full());
   if (byMaskOut_ != 0)
@@ -822,10 +830,10 @@ int Action_Matrix::SyncAction() {
   if (!vect2_.empty()) {
     if (trajComm_.Master()) {
       Darray buf( vect2_.size() );
-      trajComm_.Reduce( &(buf[0]), &(vect2_[0]), vect2_.size(), MPI_DOUBLE, MPI_SUM );
+      trajComm_.ReduceMaster( &(buf[0]), &(vect2_[0]), vect2_.size(), MPI_DOUBLE, MPI_SUM );
       vect2_ = buf;
     } else
-      trajComm_.Reduce( 0,         &(vect2_[0]), vect2_.size(), MPI_DOUBLE, MPI_SUM );
+      trajComm_.ReduceMaster( 0,         &(vect2_[0]), vect2_.size(), MPI_DOUBLE, MPI_SUM );
   }
   return 0;
 }
@@ -1026,7 +1034,7 @@ void Action_Matrix::Print() {
     }
     // Always allocate full matrix for BYRESIDUE
     matByRes_->Allocate2D( residues1_.size(), residues2_.size() ); // cols, rows
-    mprintf("    MATRIX: By-residue matrix has %u rows, %u columns.\n", 
+    mprintf("    MATRIX: By-residue matrix has %zu rows, %zu columns.\n", 
             matByRes_->Nrows(), matByRes_->Ncols());
     for (MatResArray::const_iterator resj = residues2_.begin(); resj != residues2_.end(); ++resj)
     {
@@ -1063,7 +1071,4 @@ void Action_Matrix::Print() {
                          ByMaskAverage(mask2_.Nselected(), mask2_.Nselected()));
     }
   }
-  // Process output file args FIXME Can this be done in Init()?
-  if (outfile_ != 0)
-    outfile_->ProcessArgs("square2d noxcol noheader");
 }

@@ -1,10 +1,18 @@
-#ifndef CPPTRAJ_VERSION_STRING
-#define CPPTRAJ_VERSION_STRING "V17.00b"
-#endif
-#ifndef NETCDF_VERSION_STRING
-#define NETCDF_VERSION_STRING "V17.0"
-#define NETCDF_VERSION_STRLEN 5
-#endif
 #ifndef CPPTRAJ_INTERNAL_VERSION
-#define CPPTRAJ_INTERNAL_VERSION "V4.3.2"
+/* The internal versioning for CPPTRAJ is supposed to go like this:
+ *   V<major>.<minor>.<revision>
+ * <major>    - Incremented whenever there is a major API change, e.g.
+ *              changing the Action base class, etc.
+ * <minor>    - Incremented whenever there are changes to behavior, e.g.
+ *              syntax, functionality, or output. The same input should
+ *              produce exactly the same output if the major and minor
+ *              version numbers are the same.
+ * <revision> - All other changes (so at least each PR).
+ *
+ * Whenever a number that precedes <revision> is incremented, all subsequent
+ * numbers should be reset to 0.
+ */
+#define CPPTRAJ_INTERNAL_VERSION "V6.0.1"
+/// PYTRAJ relies on this
+#define CPPTRAJ_VERSION_STRING CPPTRAJ_INTERNAL_VERSION
 #endif

@@ -34,13 +34,37 @@ ArgList &ArgList::operator=(const ArgList &rhs) {
   return *this;
 }
 
+void ArgList::Append(ArgList const& argIn) {
+  for (unsigned int idx = 0; idx != argIn.arglist_.size(); idx++) {
+    if (!argIn.marked_[idx]) {
+      arglist_.push_back( argIn.arglist_[idx] );
+      marked_.push_back( argIn.marked_[idx] );
+      argline_.append( " " + argIn.arglist_[idx] );
+    }
+  }
+}
+
 // ArgList::operator[]
 std::string const& ArgList::operator[](int idx) const {
   if (idx < 0 || idx >= (int)arglist_.size()) {
     mprinterr("Internal Error: Position %i out of range for Argument List.\n",idx);
+    mprinterr("Internal Error: [%s]\n", argline_.c_str());
     return emptystring;
   }
   return arglist_[idx];
+}
+
+// ArgList::ArgString()
+std::string ArgList::ArgString() const {
+  std::string out;
+  for (unsigned int idx = 0; idx != arglist_.size(); idx++)
+    if (!marked_[idx]) {
+      if (out.empty())
+        out.assign(arglist_[idx]);
+      else
+        out.append(" " + arglist_[idx]);
+    }
+  return out;
 }
 
 // ArgList::ClearList()
@@ -122,6 +146,32 @@ int ArgList::SetList(std::string const& inputString, const char *separator) {
   return 0;
 }
 
+/** Check the current argline_ for non-ASCII characters; report
+  * if found.
+  */
+void ArgList::CheckArgLineForNonASCII() const {
+  // Store positions of bad characters
+  std::vector<unsigned int> badChars;
+  for (std::string::const_iterator pch = argline_.begin(); pch != argline_.end(); ++pch)
+  {
+    // Extended ASCII check
+    if (static_cast<unsigned char>( *pch ) > 127) {
+      mprintf("Warning: Non-ASCII character '%c' (%x) detected in input.\n", *pch, (unsigned int)*pch);
+      //mprintf("Warning: Non-ASCII character '%x' detected in input at position %li.\n", (unsigned int)*pch, pch - argline_.begin() + 1);
+      badChars.push_back( (unsigned int)(pch - argline_.begin()) );
+    }
+  }
+  if (!badChars.empty()) {
+    std::string caratStr(argline_.size(), ' ');
+    for (std::vector<unsigned int>::const_iterator it = badChars.begin(); it != badChars.end(); ++it)
+      caratStr[*it] = '^';
+    mprintf("Warning: Non-ASCII character(s) detected in input (at '^'):\n");
+    mprintf("Warning: [%s]\n", argline_.c_str());
+    mprintf("Warning:  %s \n", caratStr.c_str());
+    mprintf("Warning: These characters may need to be removed.\n");
+  }
+}
+
 // ArgList::RemainingArgs()
 ArgList ArgList::RemainingArgs() {
   ArgList remain;
@@ -135,6 +185,13 @@ ArgList ArgList::RemainingArgs() {
   }
   remain.marked_.resize( remain.arglist_.size(), false );
   return remain;
+}
+
+int ArgList::NremainingArgs() const {
+  int nUnmarked = 0;
+  for (std::vector<bool>::const_iterator it = marked_.begin(); it != marked_.end(); ++it)
+    if (!(*it)) ++nUnmarked;
+  return nUnmarked;
 }
 
 // ArgList::AddArg()
@@ -225,8 +282,30 @@ std::string const& ArgList::GetStringNext() {
 
 /** \return true if argument at position is a potential mask. */
 bool ArgList::ArgIsMask(unsigned int pos) const {
-  size_t found = arglist_[pos].find_first_of(":@*");
-  return (found != std::string::npos);
+  //size_t found = arglist_[pos].find_first_of(":@*");
+  //return (found != std::string::npos);
+  // NOTE: The below method is more rigorous but potentially allows more
+  //       "bad" masks through as *. For example, with previous method above,
+  //       'select test@' fails with 'Tokenize: Wrong syntax' because 'test@'
+  //       is treated as a mask, but with new method below 'test@' is ignored
+  //       and 'select' assumes no mask present and selects all.
+  std::string::const_iterator p = arglist_[pos].begin();
+  // Advance past any negate operator or open parentheses. Assume token not empty.
+  while (*p == '!' || *p == '(') {
+    ++p;
+    if (p == arglist_[pos].end()) return false;
+  }
+  // Determine if character could start a mask expression.
+  bool isMask;
+  switch ( *p ) {
+    case '@':
+    case ':':
+    case '^':
+    case '*':
+    case '=': isMask = true; break;
+    default : isMask = false;
+  }
+  return isMask;
 }
 
 // ArgList::GetMaskNext()
@@ -319,6 +398,30 @@ std::string const& ArgList::GetStringKey(const char *key) {
   return emptystring;
 }
 
+ArgList ArgList::GetNstringKey(const char* key, int num) {
+  ArgList ret;
+  int nargs = (int)arglist_.size() - num;
+  for (int arg = 0; arg < nargs; arg++)
+    if (!marked_[arg]) {
+      if (arglist_[arg].compare(key)==0) {
+        // Key found. Now need it followed by num unmarked args
+        marked_[arg] = true;
+        arg++;
+        for (int i = 0; i < num; i++) {
+          if (marked_[arg+i]) {
+            mprinterr("Error: Expected '%s' to be followed by %i arguments.\n", key, num);
+            return ret;
+          } else {
+            marked_[arg+i] = true;
+            ret.arglist_.push_back( arglist_[arg+i] );
+            ret.marked_.push_back( false );
+          }
+        }
+      }
+    }
+  return ret;
+}
+
 // ArgList::GetStringKey()
 /** Search the argument list for key, return the argument following key
   * as a string if found, otherwise return default.
@@ -405,7 +508,6 @@ bool ArgList::hasKey(const char *key) {
 /** \param key string to search for
   * \return true if key is found, false if not.
   */
-// NOTE: Should this be ignoring previously marked strings?
 bool ArgList::Contains(const char *key) const {
   for (unsigned int arg = 0; arg < arglist_.size(); arg++) 
     if (!marked_[arg]) {

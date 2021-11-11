@@ -3,9 +3,10 @@
 . ../MasterTest.sh
 
 # Clean
-CleanFiles rms.in rmsd.dat test.crd T1.crd T2.crd maxmin.in maxmin.crd filter.dat
+CleanFiles rms.in rmsd.dat test.crd T1.crd T2.crd maxmin.in maxmin.crd
 
-CheckNetcdf
+TESTNAME='Outtraj tests'
+Requires netcdf maxthreads 10
 TOP="../tz2.truncoct.parm7"
 
 # Test 1
@@ -23,25 +24,17 @@ DoTest rmsd.dat.save rmsd.dat
 DoTest T1.crd T2.crd
 DoTest ../tz2.truncoct.crd test.crd
 
-if [[ -z $DO_PARALLEL ]] ; then
+# Test 2
+UNITNAME="Outtraj Test with maxmin."
+CheckFor notparallel
+if [ "$?" -eq 0 ] ; then
   INPUT="maxmin.in"
-  # Test 2
-  cat > maxmin.in <<EOF
-noprogress
-trajin ../tz2.truncoct.nc
-rms R1 first :2-11
-filter R1 min 0.7 max 0.8 out filter.dat
-outtraj maxmin.crd 
-EOF
-  RunCpptraj "Outtraj Test with filtering."
-  DoTest maxmin.crd.save maxmin.crd
-  # Test 3
   cat > maxmin.in <<EOF
 trajin ../tz2.truncoct.nc
 rms R1 first :2-11
 outtraj maxmin.crd maxmin R1 min 0.7 max 0.8
 EOF
-  RunCpptraj "Outtraj Test with maxmin."
+  RunCpptraj "$UNITNAME"
   DoTest maxmin.crd.save maxmin.crd
 fi
 

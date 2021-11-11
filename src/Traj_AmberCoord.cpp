@@ -1,6 +1,9 @@
 // Traj_AmberCoord
 #include <cstdio> // sscanf
 #include "Traj_AmberCoord.h"
+#include "Frame.h"
+#include "Topology.h"
+#include "ArgList.h"
 #include "CpptrajStdio.h"
 
 /// Size of REMD header
@@ -9,10 +12,13 @@ const size_t Traj_AmberCoord::RXSGLD_HEADER_SIZE = 44;
 
 // CONSTRUCTOR
 Traj_AmberCoord::Traj_AmberCoord() :
-  natom3_(0),
+  outfmt_("%8.3f"),
   headerSize_(0),
+  tStart_(0),
+  tEnd_(0),
+  natom3_(0),
   numBoxCoords_(0),
-  outfmt_("%8.3lf"),
+  writeType_(COORDS),
   highPrecision_(false),
   outputTemp_(false)
 {
@@ -58,9 +64,14 @@ bool Traj_AmberCoord::ID_TrajFormat(CpptrajFile& fileIn) {
     tEnd_   = 43; // 44 - 1
     return true;
   }
-  // Check if we can read at least 3 coords of width 8, Amber trajectory
-  float TrajCoord[3];
-  if ( sscanf(buffer2.c_str(), "%8f%8f%8f", TrajCoord, TrajCoord+1, TrajCoord+2) == 3 )
+  // Check if we can read 3, 6, 9, or 10 coords (corresponding to 1, 2, 3 or
+  // > 3 atoms) of width 8; Amber trajectory.
+  float TrajCoord[10];
+  int nscan = sscanf(buffer2.c_str(), "%8f%8f%8f%8f%8f%8f%8f%8f%8f%8f",
+                     TrajCoord,   TrajCoord+1, TrajCoord+2, TrajCoord+3,
+                     TrajCoord+4, TrajCoord+5, TrajCoord+6, TrajCoord+7,
+                     TrajCoord+8, TrajCoord+9);
+  if (nscan == 3 || nscan == 6 || nscan == 9 || nscan == 10)
   {
     if (debug_>0) mprintf("  AMBER TRAJECTORY file\n");
     return true;
@@ -103,11 +114,17 @@ int Traj_AmberCoord::readFrame(int set, Frame& frameIn) {
   // Get Coordinates; offset is hasREMD (size in bytes of REMD header)
   file_.BufferBeginAt(headerSize_);
   file_.BufferToDouble(frameIn.xAddress(), natom3_);
-  if (numBoxCoords_ != 0) { 
-    file_.BufferToDouble(frameIn.bAddress(), numBoxCoords_);
+  if (numBoxCoords_ != 0) {
+    double xyzabg[6];
+    file_.BufferToDouble(xyzabg, numBoxCoords_);
     // Set box angles to parmtop default if not read in
-    if (numBoxCoords_==3)
-      frameIn.SetBoxAngles( boxAngle_ );
+    if (numBoxCoords_==3) {
+      //frameIn.SetBoxAngles( boxAngle_ );
+      xyzabg[Box::ALPHA] = boxAngle_[0];
+      xyzabg[Box::BETA]  = boxAngle_[1];
+      xyzabg[Box::GAMMA] = boxAngle_[2];
+    }
+    frameIn.ModifyBox().AssignFromXyzAbg( xyzabg );
   }
   return 0;
 }
@@ -121,6 +138,15 @@ int Traj_AmberCoord::readVelocity(int set, Frame& frameIn) {
   return 0;
 }
 
+int Traj_AmberCoord::readForce(int set, Frame& frameIn) {
+  file_.SeekToFrame( set );
+  // Read frame into the char buffer
+  if (file_.ReadFrame()) return 1;
+  file_.BufferBeginAt(headerSize_);
+  file_.BufferToDouble(frameIn.fAddress(), natom3_);
+  return 0;
+}
+
 // Traj_AmberCoord::writeFrame()
 /** Write coordinates from Frame to frameBuffer. frameBuffer must be large
   * enough to accomodate all coords in F (handled by SetupWrite).
@@ -131,9 +157,17 @@ int Traj_AmberCoord::writeFrame(int set, Frame const& frameOut) {
     file_.Printf("REMD  %8i %8i %8i %8.3f\n", 0, set+1, set+1, frameOut.Temperature());
 
   file_.BufferBegin();
-  file_.DoubleToBuffer(frameOut.xAddress(), natom3_, outfmt_);
-  if (numBoxCoords_ != 0) 
-    file_.DoubleToBuffer(frameOut.bAddress(), numBoxCoords_, outfmt_);
+  switch (writeType_) {
+    case COORDS : file_.DoubleToBuffer(frameOut.xAddress(), natom3_, outfmt_); break;
+    case VEL    : file_.DoubleToBuffer(frameOut.vAddress(), natom3_, outfmt_); break;
+    case FRC    : file_.DoubleToBuffer(frameOut.fAddress(), natom3_, outfmt_); break;
+  }
+  
+  if (numBoxCoords_ != 0) {
+    if (!frameOut.BoxCrd().Is_X_Aligned())
+      mprintf("Warning: Set %i; unit cell is not X-aligned. Box cannot be properly stored as Amber ASCII trajectory.\n", set+1);
+    file_.DoubleToBuffer(frameOut.BoxCrd().XyzPtr(), numBoxCoords_, outfmt_);
+  }
 
   if (file_.WriteFrame()) return 1;
 
@@ -153,7 +187,7 @@ int Traj_AmberCoord::setupTrajin(FileName const& fname, Topology* trajParm)
   natom3_ = trajParm->Natom() * 3;
   file_.SetupFrameBuffer( natom3_, 8, 10, headerSize_, title.size() );
   if (debug_ > 0) {
-    mprintf("Each frame is %u bytes", file_.FrameSize());
+    mprintf("Each frame is %zu bytes", file_.FrameSize());
     if (headerSize_ != 0) mprintf(" (including REMD header)");
     mprintf(".\n");
   }
@@ -189,16 +223,16 @@ int Traj_AmberCoord::setupTrajin(FileName const& fname, Topology* trajParm)
           numBoxCoords_ = 0;
         } else if (numBoxCoords_ == 3) {
           // Box lengths only, ortho. or truncated oct. Use default parm angles.
-          if (trajParm->ParmBox().Type() == Box::NOBOX)
+          if (!trajParm->ParmBox().HasBox())
             mprintf("Warning: Trajectory only contains box lengths and topology has no box info.\n"
                     "Warning: To set box angles for topology use the 'parmbox' command.\n");
-          box[3] = boxAngle_[0] = trajParm->ParmBox().Alpha();
-          box[4] = boxAngle_[1] = trajParm->ParmBox().Beta();
-          box[5] = boxAngle_[2] = trajParm->ParmBox().Gamma();
-          boxInfo.SetBox( box );
+          box[3] = boxAngle_[0] = trajParm->ParmBox().Param(Box::ALPHA);
+          box[4] = boxAngle_[1] = trajParm->ParmBox().Param(Box::BETA);
+          box[5] = boxAngle_[2] = trajParm->ParmBox().Param(Box::GAMMA);
+          boxInfo.SetupFromXyzAbg( box );
         } else if (numBoxCoords_ == 6) {
           // General triclinic. Set lengths and angles.
-          boxInfo.SetBox( box );
+          boxInfo.SetupFromXyzAbg( box );
         } else {
           mprinterr("Error: In %s, expect only 3 or 6 box coords, got %i\n"
                     "Error:   Box line=[%s]\n",
@@ -298,16 +332,21 @@ int Traj_AmberCoord::setupTrajin(FileName const& fname, Topology* trajParm)
 
 void Traj_AmberCoord::WriteHelp() {
   mprintf("\tremdtraj     : Write temperature to trajectory (makes REMD trajectory).\n"
-          "\thighprecision: (ADVANCED USE ONLY) Write 8.6 instead of 8.3 format.\n");
+          "\thighprecision: (ADVANCED USE ONLY) Write 8.6 instead of 8.3 format.\n"
+          "\tmdvel        : Write velocities instead of coordinates.\n"
+          "\tmdfrc        : Write forces instead of coordinates.\n");
 }
 
 // Traj_AmberCoord::processWriteArgs()
-int Traj_AmberCoord::processWriteArgs(ArgList& argIn) {
+int Traj_AmberCoord::processWriteArgs(ArgList& argIn, DataSetList const& DSLin) {
   outputTemp_ = argIn.hasKey("remdtraj");
   if (argIn.hasKey("highprecision")) { 
-    outfmt_ = "%8.6lf";
+    outfmt_ = "%8.6f";
     highPrecision_ = true;
   }
+  if      (argIn.hasKey("mdvel")) writeType_ = VEL;
+  else if (argIn.hasKey("mdfrc")) writeType_ = FRC;
+  else if (argIn.hasKey("mdcrd")) writeType_ = COORDS;
   return 0;
 }
 
@@ -359,13 +398,25 @@ int Traj_AmberCoord::setupTrajout(FileName const& fname, Topology* trajParm,
   natom3_ = trajParm->Natom() * 3;
   file_.SetupFrameBuffer( natom3_, 8, 10 );
   // If box coords are present, allocate extra space for them
-  switch (CoordInfo().TrajBox().Type()) {
-    case Box::NOBOX   : numBoxCoords_ = 0; break;
-    case Box::ORTHO   :
-    case Box::TRUNCOCT: numBoxCoords_ = 3; break;
-    default           : numBoxCoords_ = 6;
+  Box::CellShapeType cellShape = CoordInfo().TrajBox().CellShape();
+  switch (cellShape) {
+    case Box::NO_SHAPE :
+      numBoxCoords_ = 0;
+      break;
+    case Box::CUBIC        :
+    case Box::TETRAGONAL   :
+    case Box::ORTHORHOMBIC :
+    case Box::OCTAHEDRAL   :
+      numBoxCoords_ = 3;
+      break;
+    default:
+      numBoxCoords_ = 6;
   }
   file_.ResizeBuffer( numBoxCoords_ );
+  // Warn if not X-aligned
+  if (numBoxCoords_ > 0 && !CoordInfo().TrajBox().Is_X_Aligned())
+    mprintf("Warning: Unit cell is not X-aligned. Box cannot be properly stored as Amber ASCII trajectory.\n");
+
  
   if (debug_>0) 
     rprintf("(%s): Each frame has %lu bytes.\n", file_.Filename().base(), file_.FrameSize());
@@ -380,6 +431,8 @@ void Traj_AmberCoord::Info() {
   else
     mprintf("is an AMBER trajectory");
   if (highPrecision_) mprintf(" (high precision)");
+  if (writeType_ == VEL) mprintf(" (MDVEL)");
+  else if (writeType_ == FRC) mprintf(" (MDFRC)");
 }
 #ifdef MPI
 // =============================================================================
@@ -415,10 +468,10 @@ int Traj_AmberCoord::parallelSetupTrajout(FileName const& fname, Topology* trajP
   }
   commIn.MasterBcast(&err, 1, MPI_INT);
   if (err != 0) return 1;
-  // Synchronize info on non-master threads.
-  SyncTrajIO( commIn );
+  // Broadcast info to non-master threads.
+  BroadcastTrajIO( commIn );
   // TODO For simplicity convert everything to double. Is this just lazy?
-  double tmpArray[8];
+  double tmpArray[10];
   if (commIn.Master()) {
     tmpArray[0] = (double)natom3_;
     tmpArray[1] = (double)headerSize_;
@@ -428,21 +481,26 @@ int Traj_AmberCoord::parallelSetupTrajout(FileName const& fname, Topology* trajP
     tmpArray[5] = boxAngle_[0];
     tmpArray[6] = boxAngle_[1];
     tmpArray[7] = boxAngle_[2];
-    commIn.MasterBcast(tmpArray, 8, MPI_DOUBLE);
+    tmpArray[8] = (double)writeType_;
+    tmpArray[9] = (double)highPrecision_;
+    commIn.MasterBcast(tmpArray, 10, MPI_DOUBLE);
   } else {
-    commIn.MasterBcast(tmpArray, 8, MPI_DOUBLE);
-    natom3_       = (int)tmpArray[0];
-    headerSize_   = (size_t)tmpArray[1];
-    tStart_       = (size_t)tmpArray[2];
-    tEnd_         = (size_t)tmpArray[3];
-    numBoxCoords_ = (int)tmpArray[4];
-    boxAngle_[0]  = tmpArray[5];
-    boxAngle_[1]  = tmpArray[6];
-    boxAngle_[2]  = tmpArray[7];
+    commIn.MasterBcast(tmpArray, 10, MPI_DOUBLE);
+    natom3_        = (int)tmpArray[0];
+    headerSize_    = (size_t)tmpArray[1];
+    tStart_        = (size_t)tmpArray[2];
+    tEnd_          = (size_t)tmpArray[3];
+    numBoxCoords_  = (int)tmpArray[4];
+    boxAngle_[0]   = tmpArray[5];
+    boxAngle_[1]   = tmpArray[6];
+    boxAngle_[2]   = tmpArray[7];
+    writeType_     = (WriteType)tmpArray[8];
+    highPrecision_ = (bool)tmpArray[9];
     if (append)
       file_.SetupAppend( fname, debug_ );
     else
       file_.SetupWrite( fname, debug_ );
+    if (highPrecision_) outfmt_ = "%8.6f";
   }
   // For parallel output we will need to seek. Set up the buffer again with correct offsets.
   // Figure out the size of the written title.

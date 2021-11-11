@@ -1,8 +1,14 @@
 #ifndef INC_AXISTYPE_H
 #define INC_AXISTYPE_H
-#include "Topology.h"
-#include "DataSetList.h"
-#include "DataSet_1D.h"
+#include "Matrix_3x3.h"
+#include "Vec3.h"
+#include "Frame.h"
+#include "NameType.h"
+#include "AtomMask.h"
+class Topology;
+class DataSetList;
+class DataSet_1D;
+class FileName;
 /*! \file AxisType.h
     \brief Hold classes and functions used for NA structure analysis.
  */
@@ -50,6 +56,7 @@ class NA_Base {
     void SetInputFrame(Frame const&);
     void SetC3Idx(int i)                 { c3idx_ = i;             }
     void SetC5Idx(int i)                 { c5idx_ = i;             }
+    void SetStrandNum(int i)             { strandNum_ = i;         }
     void PrintAtomNames() const;
     NA_Axis&       Axis()                { return axis_;           } //TODO: Remove?
     NA_Axis const& Axis()          const { return axis_;           }
@@ -57,6 +64,7 @@ class NA_Base {
     int ResNum()                   const { return rnum_;           }
     int C3resIdx()                 const { return c3idx_;          }
     int C5resIdx()                 const { return c5idx_;          }
+    int StrandNum()                const { return strandNum_;      }
     char BaseChar()                const { return bchar_;          }
     Frame const& Ref()             const { return Ref_;            }
     Frame const& Input()           const { return Inp_;            }
@@ -90,6 +98,7 @@ class NA_Base {
     int rnum_;                      ///< Original residue number
     int c3idx_;                     ///< Index of c3' neighbor res.
     int c5idx_;                     ///< Index of c5' neighbor res.
+    int strandNum_;                 ///< Internal NA strand number.
     char bchar_;                    ///< 1 char base name.
     NAType type_;                   ///< Base type.
     Frame Ref_;                     ///< Reference coords.
@@ -139,6 +148,7 @@ class RefBase {
     void PrintInfo() const;
     bool NameMatches(NameType const&) const;
     typedef NA_Array::const_iterator const_iterator;
+    unsigned int size()                const { return atoms_.size();  }
     const_iterator begin()             const { return atoms_.begin(); }
     const_iterator end()               const { return atoms_.end();   }
     NA_Atom const& operator[](int idx) const { return atoms_[idx];    }
@@ -162,8 +172,8 @@ class NA_Reference {
     NA_Reference();
     /// \return NA_Base set up with correct reference.
     RetType SetupBaseRef(NA_Base&, Topology const&, int, DataSetList&, std::string const&);
-    /// Add given name to first reference base of the specified type.
-    void AddNameToBaseType(NameType const&, NA_Base::NAType);
+    /// Attempt to create new reference by mapping given residue to an existing reference
+    int AddCustomBase(NameType const&, Topology const&, int, NA_Base::NAType);
     /// Load a reference from a file
     int LoadFromFile(FileName const&);
   private:

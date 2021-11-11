@@ -49,6 +49,11 @@ static inline bool HasEndQuote(std::string const& strIn) {
   return false;
 }
 
+static inline std::string RemoveEndQuote(std::string const& strIn) {
+  std::string tmps = strIn.substr(0, strIn.size()-1);
+  return tmps;
+}
+
 /** Split given line into a certain number of tokens. Data might be
   * split across multiple lines.
   * \param NexpectedCols Number of expected data cols.
@@ -74,6 +79,8 @@ int CIFfile::DataBlock::GetColumnData(int NexpectedCols, BufferedLine& infile, b
       idx = 0;
     }
     const char *tkn = infile.NextToken();
+    // Skip blanks
+    if (tkn == 0) continue;
     idx++;
     //mprintf("DEBUG: Token %i '%s'\n", idx, tkn);
     if (isSerial && nReadCols == 0) {
@@ -89,6 +96,8 @@ int CIFfile::DataBlock::GetColumnData(int NexpectedCols, BufferedLine& infile, b
       columnData_.back().back().append( " " + std::string(tkn) );
       // Check for an end quote.
       if (HasEndQuote( columnData_.back().back() )) {
+        // Remove that end quote.
+        columnData_.back().back() = RemoveEndQuote( columnData_.back().back() );
         insideQuote = false;
         nReadCols++;
       }
@@ -108,8 +117,18 @@ int CIFfile::DataBlock::GetColumnData(int NexpectedCols, BufferedLine& infile, b
       } else {
         columnData_.back().push_back( std::string(tkn) );
         // Check if column began and did not end with a quote.
-        if ( IsQuoteChar(columnData_.back().back()[0]) && !HasEndQuote(columnData_.back().back()) )
-        insideQuote = true;
+        if (IsQuoteChar(columnData_.back().back()[0])) {
+          // Remove leading quote.
+          std::string tmps = columnData_.back().back().substr(1);
+          columnData_.back().back() = tmps;
+          if ( !HasEndQuote((columnData_.back().back())) ) {
+            // Still need to look for the end quote.
+            insideQuote = true;
+          } else {
+            // We have the end quote. Remove it.
+            columnData_.back().back() = RemoveEndQuote( columnData_.back().back() );
+          }
+        }
       }
       if (!insideSemi && !insideQuote) nReadCols++;
     }
@@ -160,11 +179,11 @@ void CIFfile::DataBlock::ListData() const {
   mprintf("DataBlock: %s\n", dataHeader_.c_str());
   for (Sarray::const_iterator colname = columnHeaders_.begin();
                               colname != columnHeaders_.end(); ++colname)
-    mprintf("  Col %u name: %s\n", colname - columnHeaders_.begin(), colname->c_str());
+    mprintf("  Col %li name: %s\n", colname - columnHeaders_.begin(), colname->c_str());
   for (std::vector<Sarray>::const_iterator rec = columnData_.begin();
                                            rec != columnData_.end(); ++rec)
   {
-    mprintf("    [%u] ", rec - columnData_.begin());
+    mprintf("    [%li] ", rec - columnData_.begin());
     for (Sarray::const_iterator col = rec->begin();
                                 col != rec->end(); ++col)
       mprintf(" {%s}", col->c_str());

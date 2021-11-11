@@ -6,7 +6,8 @@ INPUT="diffusion.in"
 
 CleanFiles $INPUT diff_?.xmgr diff.dat diff.1.dat diff.2.dat diff.3.dat nw.dat \
            WAT_O.agr DC.dat Nonortho.agr Nonortho.dat noimage.agr noimage.dat
-CheckNetcdf
+TESTNAME='Diffusion tests'
+Requires netcdf maxthreads 10
 
 # Basic ptraj diffusion test
 # creates <prefix>_X.xmgr, X = {a,r,x,y,z}
@@ -61,32 +62,31 @@ EOF
 # STFC diffusion tests
 Test_stfc_diffusion() {
   TOP=../tz2.ortho.parm7
-  CMD="stfcdiffusion"
   # Basic test
   cat > $INPUT <<EOF
 trajin ../tz2.ortho.nc
-$CMD mask :1-13 out diff.dat
+stfcdiffusion mask :1-13 out diff.dat
 EOF
   RunCpptraj "STFC Diffusion Test"
   DoTest diff.dat.save diff.dat
   # Test with individual distances
   cat > $INPUT <<EOF
 trajin ../tz2.ortho.nc
-$CMD mask :1-13 out diff.1.dat distances
+stfcdiffusion mask :1-13 out diff.1.dat distances
 EOF
   RunCpptraj "STFC Diffusion Test with individual distances"
   DoTest diff.1.dat.save diff.1.dat
   # Test with COM
   cat > $INPUT <<EOF
 trajin ../tz2.ortho.nc
-$CMD mask :1-13 out diff.2.dat com
+stfcdiffusion mask :1-13 out diff.2.dat com
 EOF
   RunCpptraj "STFC Diffusion Test with COM"
   DoTest diff.2.dat.save diff.2.dat
   # Test with second mask
   cat > $INPUT <<EOF
 trajin ../tz2.ortho.nc 
-$CMD mask :1-13 out diff.3.dat mask2 :WAT
+stfcdiffusion mask :1-13 out diff.3.dat mask2 :WAT
 EOF
   RunCpptraj "STFC Diffusion Test with second mask"
   DoTest diff.3.dat.save diff.3.dat
@@ -94,14 +94,16 @@ EOF
 }
 
 Test_diffusion_noImage
-MaxThreads 1 "Imaged diffusion tests"
-if [[ $? -eq 0 ]] ; then
+UNITNAME='Imaged diffusion tests'
+CheckFor maxthreads 1
+if [ $? -eq 0 ] ; then
   Test_diffusion_oldSyntax
   Test_diffusion_newSyntax
   Test_diffusion_nonOrtho
 fi
-NotParallel "STFC diffusion tests."
-if [[ $? -eq 0 ]] ; then
+UNITNAME='STFC diffusion tests'
+CheckFor notparallel
+if [ $? -eq 0 ] ; then
   Test_stfc_diffusion
 fi
 

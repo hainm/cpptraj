@@ -5,29 +5,34 @@
 # Clean
 CleanFiles jcoupling.in Jcoupling.dat jc.dat
 
-CheckNetcdf
+TESTNAME='J-coupling tests'
+Requires netcdf
 INPUT="-i jcoupling.in"
 # Test 1
-MaxThreads 1 "J-Coupling single frame test."
-if [[ $? -eq 0 ]] ; then
+UNITNAME='J-Coupling single frame test'
+CheckFor maxthreads 1 file ../../dat/Karplus.txt
+if [ $? -eq 0 ] ; then
   cat > jcoupling.in <<EOF
 noprogress
 parm ../tz2.parm7
 trajin ../tz2.nc 1 1
-jcoupling outfile Jcoupling.dat kfile Karplus.txt
+jcoupling outfile Jcoupling.dat kfile ../../dat/Karplus.txt
 EOF
-  RunCpptraj "J-Coupling command test."
+  RunCpptraj "$UNITNAME"
   DoTest Jcoupling.dat.save Jcoupling.dat
 fi
 
-cat > jcoupling.in <<EOF
+UNITNAME='J-Coupling extended test'
+CheckFor amberorcpptraj 
+if [ $? -eq 0 ] ; then
+  cat > jcoupling.in <<EOF
 parm ../DPDP.parm7
 trajin ../DPDP.nc
-jcoupling out jc.dat kfile Karplus.txt :2
+jcoupling out jc.dat :2
 EOF
-RunCpptraj "J-Coupling extended test."
-DoTest jc.dat.save jc.dat
-
+  RunCpptraj "$UNITNAME."
+  DoTest jc.dat.save jc.dat
+fi
 EndTest
 
 exit 0

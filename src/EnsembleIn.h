@@ -1,15 +1,19 @@
 #ifndef INC_ENSEMBLEIN_H
 #define INC_ENSEMBLEIN_H
 #include "InputTrajCommon.h"
-#include "FrameArray.h"
+// Not forward-declared because is just a typedef
 #include "FramePtrArray.h"
 #include "ReplicaInfo.h"
+#include "Frame.h" // For RemdIdxType TODO put RemdIdxType in ReplicaInfo
 #ifdef MPI
 # include "Parallel.h"
 # ifdef TIMER
 #   include "Timer.h"
 # endif
 #endif
+// Forward declarations
+class FrameArray;
+class CoordinateInfo;
 /// Read in an array of frames at a time.
 class EnsembleIn {
   public:
@@ -42,9 +46,9 @@ class EnsembleIn {
     int SetIndicesMap(std::vector<RemdIdxType> const&);
     InputTrajCommon& SetTraj() { return traj_; }
     /// For converting temperature to replica index
-    ReplicaMap<double> TemperatureMap_;
+    ReplicaInfo::Map<double> TemperatureMap_;
     /// For converting indices to replica index
-    ReplicaMap<RemdIdxType> IndicesMap_;
+    ReplicaInfo::Map<RemdIdxType> IndicesMap_;
     ReplicaInfo::TargetType targetType_; ///< Hold type of REMD frame being searched for.
     int badEnsemble_;         ///< Set to 1 if problem reading ensemble, 0 otherwise.
     int debug_;
@@ -64,8 +68,8 @@ class EnsembleIn {
 #   endif
 #   endif
   private:
-    static void PrintReplicaTmap(ReplicaMap<double> const&);
-    static void PrintReplicaImap(ReplicaMap<RemdIdxType> const&);
+    static void PrintReplicaTmap(ReplicaInfo::Map<double> const&);
+    static void PrintReplicaImap(ReplicaInfo::Map<RemdIdxType> const&);
 
     InputTrajCommon traj_;
 #   ifdef MPI

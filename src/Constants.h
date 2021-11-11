@@ -28,10 +28,12 @@ namespace Constants {
   const double GASK_J       = 8.3144621;
   /// Gas constant in kcal/mol*K
   const double GASK_KCAL    = 0.0019872041;
-  // Avogadro constant
+  /// Avogadro constant
   const double NA = 6.02214129e23;
-  // Speed of light (m/s)
+  /// Speed of light (m/s)
   const double C0 = 299792458;
+  /// Euler-Mascheroni constant
+  const double EULER_MASC = 0.5772156649;
   /// Convert atomic mass unit (amu) to kg
   const double AMU_TO_KG = 1.660539e-27;
   /// Convert Angstroms to nanometers
@@ -42,7 +44,17 @@ namespace Constants {
   const double CAL_TO_J = 4.184;
   /// Convert Joules to calories
   const double J_TO_CAL = 1.0 / CAL_TO_J;
+  /// One Debye in units of electron charge times Angstroms
+  const double DEBYE_EA = 0.20822678;
   /// Convert electron charge to Amber units (w/ prefactor)
+  /** NOTE: This value is actually very low precision, but is used since this
+    *       is the value used by LEaP. The actual conversion of Coulomb's
+    *       constant for use with Amber units (i.e. e-, Ang, and kcal/mol)
+    *       is (with NA representing Avogadro's number):
+    *         (8.987552e9 N*m^2/C^2) * (1.602177e-19 C/e-)^2 * (10^10 Ang/m) *
+    *         (1/4184 kcal/J) * NA = 332.06279350
+    *       The square root of this value is 18.222590197
+    */
   const double ELECTOAMBER  = 18.2223;
   /// Convert Amber charge to electron charge
   const double AMBERTOELEC  = 1.0 / ELECTOAMBER;
@@ -55,5 +67,15 @@ namespace Constants {
     * itself is derived from sqrt(1 / ((AMU_TO_KG * NA) / (1000 * CAL_TO_J))).
     */
   const double AMBERTIME_TO_PS = 20.455;
+  /// Pico prefix
+  const double PICO = 1e-12;
+  /// Convert Gromacs force units (kJ / mol * nm) to Amber units (kcal / mol * Ang)
+  const double GMX_FRC_TO_AMBER = ANG_TO_NM * J_TO_CAL;
+  /// Convert Amber force units to Gromacs
+  const double AMBER_FRC_TO_GMX = NM_TO_ANG * CAL_TO_J;
+  /// Convert Gromacs velocity units (nm / ps) to Amber units (Ang / (1/20.455)ps).
+  const double GMX_VEL_TO_AMBER = NM_TO_ANG / AMBERTIME_TO_PS;
+  /// Convert Amber velocity units to Gromacs
+  const double AMBER_VEL_TO_GMX = ANG_TO_NM * AMBERTIME_TO_PS;
 }
 #endif

@@ -15,6 +15,7 @@ bool DataIO_CCP4::ID_DataFormat( CpptrajFile& infile ) {
   bool isCCP4 = false;
   if (!infile.OpenFile()) {
     unsigned char MAP[4];
+    MAP[0] = ' '; MAP[1] = ' '; MAP[2] = ' '; MAP[3] = ' ';
     if (infile.Seek(52 * wSize) == 0) {
       infile.Read( MAP, wSize );
       isCCP4 = MapCharsValid( MAP );
@@ -147,15 +148,21 @@ int DataIO_CCP4::ReadData(FileName const& fname,
   if (gridDS == 0) return 1;
   DataSet_GridFlt& grid = static_cast<DataSet_GridFlt&>( *gridDS );
   // Allocate grid from dims and spacing. FIXME OK to assume zero origin?
+  double xyzabg[6];
+  const float* boxptr = buffer.f + 10;
+  for (int i = 0; i < 6; i++)
+    xyzabg[i] = (double)boxptr[i];
+  Box gridBox;
+  gridBox.SetupFromXyzAbg( xyzabg );
   if (grid.Allocate_N_O_Box( buffer.i[7], buffer.i[8], buffer.i[9],
-                             Vec3(0.0), Box(buffer.f + 10) ) != 0)
+                             Vec3(0.0), gridBox ) != 0)
   {
     mprinterr("Error: Could not allocate grid.\n");
     return 1;
   }
   // FIXME: Grids are currently indexed so Z is fastest changing.
   //        Should be able to change indexing in grid DataSet.
-  size_t mapSize = buffer.i[7] * buffer.i[8] * buffer.i[9];
+  size_t mapSize = (size_t)buffer.i[7] * (size_t)buffer.i[8] * (size_t)buffer.i[9];
   mprintf("\tCCP4 map has %zu elements\n", mapSize);
   mprintf("\tDensity: Min=%f  Max=%f  Mean=%f  RMS=%f\n",
           buffer.f[19], buffer.f[20], buffer.f[21], buffer.f[54]);
@@ -220,11 +227,12 @@ int DataIO_CCP4::WriteSet3D( DataSetList::const_iterator const& setIn, CpptrajFi
   }
   DataSet_3D const& grid = static_cast<DataSet_3D const&>( *(*setIn) );
   // Check input grid
-  Vec3 OXYZ = grid.GridOrigin();
+  Vec3 OXYZ = grid.Bin().GridOrigin();
   if (OXYZ[0] < 0.0 || OXYZ[1] < 0.0 || OXYZ[2] < 0.0 ||
       OXYZ[0] > 0.0 || OXYZ[1] > 0.0 || OXYZ[2] > 0.0)
     mprintf("Warning: Grid '%s' origin is not 0.0, 0.0, 0.0\n"
-            "Warning:  Origin other than 0.0 not yet supported for CCP4 write.\n");
+            "Warning:  Origin other than 0.0 not yet supported for CCP4 write.\n",
+             grid.legend());
   // Set default title if none set 
   if (title_.empty())
     title_.assign("CPPTRAJ CCP4 map volumetric data, set '" + grid.Meta().Legend() +
@@ -246,13 +254,14 @@ int DataIO_CCP4::WriteSet3D( DataSetList::const_iterator const& setIn, CpptrajFi
   buffer.i[7] = (int)grid.NX();
   buffer.i[8] = (int)grid.NY();
   buffer.i[9] = (int)grid.NZ();
-  Box box( grid.Ucell() );
-  buffer.f[10] = (float)box[0];
-  buffer.f[11] = (float)box[1];
-  buffer.f[12] = (float)box[2];
-  buffer.f[13] = (float)box[3];
-  buffer.f[14] = (float)box[4];
-  buffer.f[15] = (float)box[5];
+  Box box;
+  box.SetupFromUcell( grid.Bin().Ucell() );
+  buffer.f[10] = (float)box.Param(Box::X);
+  buffer.f[11] = (float)box.Param(Box::Y);
+  buffer.f[12] = (float)box.Param(Box::Z);
+  buffer.f[13] = (float)box.Param(Box::ALPHA);
+  buffer.f[14] = (float)box.Param(Box::BETA);
+  buffer.f[15] = (float)box.Param(Box::GAMMA);
   buffer.i[16] = 1; // Cols = X
   buffer.i[17] = 2; // Rows = Y
   buffer.i[18] = 3; // Secs = Z

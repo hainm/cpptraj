@@ -40,9 +40,21 @@ class Action_NAstruct: public Action {
     // ----- Enumerations ------------------------
     enum HbondType { WC = 0, HOOG, OTHER };
     enum GrooveType { PP_OO = 0, HASSAN_CALLADINE };
-    /// How to find base pairs: first frame, reference structure, all frames.
-    enum FindType { FIRST = 0, REFERENCE, ALL };
+    /// How to find base pairs: first frame, reference structure, all frames, guess.
+    enum FindType { FIRST = 0, REFERENCE, ALL, GUESS };
     // ----- Data Structures ---------------------
+    /// Hold consecutive bases
+    struct Stype {
+      DataSet_1D* dx_;
+      DataSet_1D* dy_;
+      DataSet_1D* dz_;
+      DataSet_1D* rx_;
+      DataSet_1D* ry_;
+      DataSet_1D* rz_;
+      unsigned int strandidx_; ///< Index in Strands_
+      //unsigned int base1idx_; ///< Index of first base in Bases_
+      //unsigned int base2idx_; ///< Index of second base in Bases_
+    };
     /// Hold a base pair.
     struct BPtype {
       NA_Axis bpaxis_; ///< Base pair axis.
@@ -95,8 +107,11 @@ class Action_NAstruct: public Action {
     // ----- Type Definitions --------------------
     typedef std::vector<NA_Base> Barray;      ///< Array of NA bases
     typedef std::pair<int,int> Rpair;         ///< Pair of residue numbers / BP indices
+    typedef std::map<Rpair,Stype> Smap;       ///< Map of residue numbers to strand pairs
     typedef std::map<Rpair,BPtype> BPmap;     ///< Map of residue numbers to BP
     typedef std::map<Rpair,StepType> StepMap; ///< Map of BP indices to Steps
+    typedef std::vector<Rpair> StrandArray;   ///< Hold indices into Bases_ for strand beg/end
+    typedef std::map<std::string, NA_Base::NAType> RefMapType; ///< Map custom res names to target types
     // ----- Functions ---------------------------
     /// Recursively travel sugar-phosphate backbone to find the next residue in a strand.
     static int TravelBackbone(Topology const&, int, std::vector<int>&);
@@ -110,14 +125,20 @@ class Action_NAstruct: public Action {
     static HbondType ID_HBtype(NA_Base const&, int, NA_Base const&, int);
     /// Calculate the total number of hydrogen bonds and WC hbonds between two bases.
     int CalcNumHB(NA_Base const&, NA_Base const&, int&);
-    /// Determine which bases are paired, set base pair data .
+    /// \return New/existing base pair corresponding to given bases.
+    BPmap::iterator AddBasePair(int, NA_Base const&, int, NA_Base const&);
+    /// Determine which bases are paired geometrically, set base pair data.
     int DetermineBasePairing();
+    /// Guess which bases are paired based on strand layout.
+    int GuessBasePairing(Topology const&);
     /// Calculate translational/rotational parameters between two axes.
     int calculateParameters(NA_Axis const&, NA_Axis const&, NA_Axis*, double*);
     /// Calculate helical parameters between two axes.
     int helicalParameters(NA_Axis const&, NA_Axis const&, double *);
     /// \return index of base that is N steps away in specified direction from another base.
     int GetBaseIdxStep(int, int) const;
+    /// Determine individual base parameters in single strands.
+    int DetermineStrandParameters(int);
     /// Determine individual base and base pair parameters.
     int DeterminePairParameters(int);
     /// Determine base pair steps and step parameters, including HC groove calc.
@@ -130,9 +151,12 @@ class Action_NAstruct: public Action {
     MetaData NewStepType(StepType&, int, int, int, int, int) const;
     // ----- Variables ---------------------------
     NA_Reference refBases_;             ///< Hold reference bases
+    RefMapType nameToRef_;              ///< Map residue names to custom reference
     Barray Bases_;                      ///< Hold nucleobases
+    Smap StrandPairs_;                  ///< Hold consecutive bases in strands
     BPmap BasePairs_;                   ///< Hold base pairs
     StepMap Steps_;                     ///< Hold base pair steps.
+    StrandArray Strands_;               ///< Hold strand info
     NA_Base::PmethodType puckerMethod_; ///< Pucker calculation method.
     double HBdistCut2_;                 ///< distance Cutoff^2 for determining hydrogen bonds
     double originCut2_;                 ///< Cutoff^2 for determining base-pairing vi origins
@@ -147,10 +171,14 @@ class Action_NAstruct: public Action {
     bool printheader_;                  ///< If true, print header to naout files.
     bool seriesUpdated_;                ///< If false, check that time series data is nframes long
     bool skipIfNoHB_;                   ///< When true, do not calc parameters when BP not present
+    bool spaceBetweenFrames_;           ///< If false do not print spaces between frames in naout
+    bool sscalc_;                       ///< If true determine params for consecutive bases in strands
     CpptrajFile* bpout_;                ///< Base pair out (BP.<suffix>).
+    CpptrajFile* ssout_;                ///< Single strand out (SS.<suffix>).
     CpptrajFile* stepout_;              ///< Base pair step out (BPstep.<suffix>).
     CpptrajFile* helixout_;             ///< Helical parameters out (Helix.<suffix>).
     std::string dataname_;              ///< NA DataSet name (default NA).
+    std::vector<bool> BpTypes_;         ///< Hold specified base pairing types for strands
     // TODO: Replace these with new DataSet type
     DataSetList* masterDSL_;
 #   ifdef NASTRUCTDEBUG

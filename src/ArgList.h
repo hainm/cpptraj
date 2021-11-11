@@ -24,6 +24,8 @@ class ArgList {
     // Copy/Assignment
     ArgList(const ArgList&);
     ArgList& operator=(const ArgList &);
+    // Append all unmarked args to this arg list
+    void Append(ArgList const&);
     /// \return the argument at the given position
     std::string const& operator[](int) const;
     /// \return Internal argument list as vector of strings
@@ -40,13 +42,19 @@ class ArgList {
     bool empty()           const { return arglist_.empty();     }
     /// \return the argument string
     const char *ArgLine()  const { return argline_.c_str();     }
-    std::string const& ArgString() const { return argline_;     }
+    std::string const& ArgLineStr() const { return argline_; }
+    /// \return all unmarked arguments as a string
+    std::string ArgString() const;
     /// Clear list
     void ClearList();
     /// Set up argument list from string and given separators
     int SetList(std::string const&, const char *);
-    /// \return an argument list of remaining unmarked args.
+    /// Check for and report non-ASCII characters in argline_
+    void CheckArgLineForNonASCII() const;
+    /// \return an argument list of remaining unmarked args (and mark them here).
     ArgList RemainingArgs();
+    /// \return number of unmarked arguments
+    int NremainingArgs() const;
     /// Add argument to the list
     void AddArg(std::string const&);
     /// Mark given argument
@@ -77,6 +85,8 @@ class ArgList {
     double getNextDouble(double);
     /// \return the string following the given key
     std::string const& GetStringKey(const char *);
+    /// \return ArgList containing N unmarked arguments following given key
+    ArgList GetNstringKey(const char*, int);
     /// \return string following given key or default if not found.
     std::string const& GetStringKey(const char *, std::string const&);
     /// \return the integer following the given key 
@@ -85,7 +95,7 @@ class ArgList {
     double getKeyDouble(const char*, double);
     /// \return true if the key is present in the list
     bool hasKey(const char*);
-    /// \return true if they key is in the list but do not mark.
+    /// \return true if they key is in the list and unmarked; do not mark.
     bool Contains(const char*) const;
   private:
     /// Empty string to return when args not found

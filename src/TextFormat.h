@@ -6,7 +6,7 @@
 class TextFormat {
   public:
     /// Formats: f, E, g, i, s
-    enum FmtType { DOUBLE = 0, SCIENTIFIC, GDOUBLE, INTEGER, STRING };
+    enum FmtType { DOUBLE = 0, SCIENTIFIC, GDOUBLE, INTEGER, UNSIGNED, STRING };
     /// Alignment type: Right, Left, Right with leading space.
     enum AlignType { RIGHT = 0, LEFT, LEADING_SPACE };
     /// CONSTRUCTOR - default 8.3f format
@@ -32,8 +32,14 @@ class TextFormat {
     TextFormat(size_t z, double m, double s, int w, int p) : type_(DOUBLE), width_(w),
                precision_(p), nelements_(1), colwidth_(0), align_(RIGHT), isLong_(false)
       { SetCoordFormat( z, m, s, w, p ); }
+    /// CONSTRUCTOR - For output coords, type, size, min, step, width, precision
+    TextFormat(FmtType t, size_t z, double m, double s, int w, int p) : type_(t), width_(w),
+               precision_(p), nelements_(1), colwidth_(0), align_(RIGHT), isLong_(false)
+      { SetCoordFormat( z, m, s, w, p ); }
     /// Set double format string for size, min, step, default width and precision 
     void SetCoordFormat(size_t, double, double, int, int);
+    /// Set format type. Only works for double-precision formats.
+    int SetFormatType(FmtType);
     /// Set format string with new alignment.
     void SetFormatAlign(AlignType t) { align_ = t; SetFormatString(); }
     /// Set format string with new width
@@ -45,14 +51,23 @@ class TextFormat {
     /// \return pointer to format string.
     const char* fmt()        const { return fmt_.c_str(); }
     std::string const& Fmt() const { return fmt_;         }
+    FmtType FormatType()     const { return type_;        }
     int Width()              const { return width_;       }
     int Precision()          const { return precision_;   }
     int ColumnWidth()        const { return colwidth_;    }
+    /// \return True if given TextFormat matches this format type, width, and precision.
+    bool operator==(TextFormat const& rhs) const {
+      return ( (type_ == rhs.type_) && (width_ == rhs.width_) && (precision_ == rhs.precision_) );
+    }
+    /// \return Description of the given format type.
+    static const char* typeDescription(FmtType f) { return TypeDesc_[f]; }
   private:
+    static inline bool IsDoubleType(FmtType);
     /// Set format string for current type, width, precision, etc 
     void SetFormatString();
 
     static char TypeChar_[]; ///< Hold printf format chars for each type.
+    static const char* TypeDesc_[]; ///< Hold text description of formats
 
     std::string fmt_;  ///< Hold format string.
     FmtType type_;     ///< Format type.

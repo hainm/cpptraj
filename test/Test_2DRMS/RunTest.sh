@@ -3,9 +3,11 @@
 . ../MasterTest.sh
 
 # Clean
-CleanFiles rms.in rmsd1.dat rmsd2.dat ref.nc rmsd.mass.dat dme.dat trp.dat nofit.dat
+CleanFiles rms.in rmsd1.dat rmsd2.dat ref.nc rmsd.mass.dat dme.dat trp.dat \
+           nofit.dat rgacc.dat
 
-CheckNetcdf
+TESTNAME='2D RMSD tests'
+Requires netcdf maxthreads 10
 TOP="../tz2.parm7"
 CRD="../tz2.nc"
 INPUT="rms.in"
@@ -18,7 +20,6 @@ trajin $CRD 1 10
 EOF
 RunCpptraj "2D RMSD Test."
 DoTest rmsd.dat.save rmsd2.dat
-CheckTest
 
 # Test 2 - 2drms, mass-weighted
 cat > rms.in <<EOF
@@ -28,11 +29,11 @@ trajin $CRD 1 10
 EOF
 RunCpptraj "2D RMSD Test, mass-weighted."
 DoTest rmsd.mass.dat.save rmsd.mass.dat
-CheckTest
 
 # Test 3 - 2drms to reference traj
-CheckPnetcdf
-if [[ $? -eq 0 ]] ; then
+UNITNAME='2D RMSD Test with reference trajectory'
+CheckFor pnetcdf
+if [ $? -eq 0 ] ; then
   cat > rms.in <<EOF
 trajin $CRD 1 10
 trajout ref.nc netcdf
@@ -41,7 +42,7 @@ run
 2drms crdset crd1 :3-7 rmsout rmsd1.dat reftraj ref.nc
 runanalysis
 EOF
-  RunCpptraj "2D RMSD Test with reference trajectory."
+  RunCpptraj "$UNITNAME"
   DoTest rmsd.dat.save rmsd1.dat
 fi
 
@@ -52,7 +53,6 @@ trajin $CRD 1 10
 EOF
 RunCpptraj "2D DME Test."
 DoTest dme.dat.save dme.dat
-CheckTest
 
 # Test 5 - Reference Mask
 cat > rms.in <<EOF
@@ -73,6 +73,19 @@ rms first :2-12@CA
 EOF
 RunCpptraj "2D RMSD test, no fitting."
 DoTest nofit.dat.save nofit.dat
+
+# Test 7 - coords with velocities
+TOP=''
+CRD=''
+cat > rms.in <<EOF
+parm ../rGACC.full.parm7
+for i=1;i<10;i++
+  trajin ../rGACC.full.nc
+done
+2drms crd1 :1-4&!@H= out rgacc.dat nosquare2d
+EOF
+RunCpptraj "2D RMSD test, read coords with velocity info"
+DoTest rgacc.dat.save rgacc.dat
 
 EndTest
 

@@ -39,9 +39,9 @@ Exec::RetType Exec_SequenceAlign::Execute(CpptrajState& State, ArgList& argIn) {
     mprinterr("Error: Must specify output file.\n");
     return CpptrajState::ERR;
   }
-  TrajectoryFile::TrajFormatType fmt = TrajectoryFile::GetFormatFromArg(argIn);
-  if (fmt != TrajectoryFile::PDBFILE && fmt != TrajectoryFile::MOL2FILE)
-    fmt = TrajectoryFile::PDBFILE; // Default to PDB
+  // Default to PDB. TODO only allow PDB/Mol2?
+  TrajectoryFile::TrajFormatType fmt =
+    TrajectoryFile::WriteFormatFromArg(argIn, TrajectoryFile::PDBFILE);
   int smaskoffset = argIn.getKeyInt("smaskoffset", 0) + 1;
   int qmaskoffset = argIn.getKeyInt("qmaskoffset", 0) + 1;
 
@@ -149,14 +149,15 @@ Exec::RetType Exec_SequenceAlign::Execute(CpptrajState& State, ArgList& argIn) {
     NameType SresName( Residue::ConvertResName(Sbjct[sres]) );
     if (qres != -1) {
       Residue const& QR = qref.Parm().Res(qres);
-      Residue SR(SresName, sres+1, ' ', QR.ChainID());
+      Residue SR(SresName, sres+1, ' ', QR.ChainId());
       if (Query[qres] == Sbjct[sres]) { // Exact match. All non-H atoms.
         for (int qat = QR.FirstAtom(); qat != QR.LastAtom(); qat++)
         {
-          if (qref.Parm()[qat].Element() != Atom::HYDROGEN)
+          if (qref.Parm()[qat].Element() != Atom::HYDROGEN) {
             sTop.AddTopAtom( qref.Parm()[qat], SR );
             sFrame.AddXYZ( qref.Coord().XYZ(qat) );
             //sMask.AddAtom(qat);
+          }
         }
       } else { // Partial match. Copy only backbone and CB.
         for (int qat = QR.FirstAtom(); qat != QR.LastAtom(); qat++)
@@ -228,7 +229,7 @@ Exec::RetType Exec_SequenceAlign::Execute(CpptrajState& State, ArgList& argIn) {
   //Frame sFrame(qref.Coord(), sMask);
   // Write output traj
   Trajout_Single trajout;
-  if (trajout.PrepareTrajWrite(outfilename, argIn, &sTop, CoordinateInfo(), 1, fmt))
+  if (trajout.PrepareTrajWrite(outfilename, argIn, State.DSL(), &sTop, CoordinateInfo(), 1, fmt))
     return CpptrajState::ERR;
   if (trajout.WriteSingle(0, sFrame)) return CpptrajState::ERR;
   trajout.EndTraj();

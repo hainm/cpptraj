@@ -13,8 +13,10 @@ class DataSet_double : public DataSet_1D {
     std::vector<double> const& Data() const { return Data_;           }
     void operator=(std::vector<double> const& rhs) { Data_ = rhs;     }
     void AddElement(double d)            { Data_.push_back( d );      }
-    /// Make set size sizeIn, all values set to 0.0.
+    /// Make set size sizeIn, any extra values set to 0.0.
     void Resize(size_t sizeIn)           { Data_.resize(sizeIn, 0.0); }
+    /// Make set size sizeIn, all values set to 0.0.
+    void Zero(size_t sizeIn)             { Data_.assign(sizeIn, 0.0); }
     typedef std::vector<double>::iterator iterator;
     iterator begin()                     { return Data_.begin();      }
     iterator end()                       { return Data_.end();        }
@@ -28,9 +30,14 @@ class DataSet_double : public DataSet_1D {
     void Add( size_t, const void* );
     void WriteBuffer(CpptrajFile&, SizeArray const&) const;
     int Append(DataSet*);
+    size_t MemUsageInBytes() const { return Data_.size() * sizeof(double); }
+    int MemAlloc(SizeArray const&);
+    void CopyBlock(size_t, const DataSet*, size_t, size_t);
     // ----- DataSet_1D functions ----------------
-    double Dval(size_t idx)        const { return Data_[idx];         }
-    double Xcrd(size_t idx)        const { return Dim(0).Coord(idx);  }
+    double Dval(size_t idx)         const { return Data_[idx];         }
+    double Xcrd(size_t idx)         const { return Dim(0).Coord(idx);  }
+    const void* VoidPtr(size_t idx) const { return (void*)(&(Data_[0])+idx); }
+    void SetY(size_t idx, double y)       { Data_[idx] = y; }
   private:
     std::vector<double> Data_;
 };

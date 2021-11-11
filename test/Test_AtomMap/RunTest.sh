@@ -4,11 +4,16 @@
 
 # Clean
 CleanFiles atommap.in initial.mol2 atommap.dat reordered.pdb reordered.mol2 \
-           fit.mol2 rmsd.dat map.chm_to_amb.dat mapped.pdb.? rmsout.dat
+           fit.mol2 rmsd.dat map.chm_to_amb.dat mapped.pdb.? rmsout.dat \
+           map.byres.chm_to_amb.dat
+
+TESTNAME='Atom map tests'
+Requires maxthreads 3
 
 INPUT="-i atommap.in"
-MaxThreads 1 "AtomMap Test"
-if [[ $? -eq 0 ]] ; then
+UNITNAME='Basic atommap test'
+CheckFor maxthreads 1
+if [ $? -eq 0 ] ; then
   # Test 1
   cat > atommap.in <<EOF
 noprogress
@@ -39,8 +44,9 @@ EOF
 fi
 
 # Test 2
-MaxThreads 2 "AtomMap with 'rmsfit'"
-if [[ $? -eq 0 ]] ; then
+UNITNAME="AtomMap with 'rmsfit'"
+CheckFor maxthreads 2
+if [ $? -eq 0 ] ; then
   cat > atommap.in <<EOF
 parm xtallig.mol2
 reference xtallig.mol2
@@ -57,8 +63,9 @@ EOF
 fi
 
 # Test 3
-MaxThreads 3 "Atom map charmm->amber atom order"
-if [[ $? -eq 0 ]] ; then
+UNITNAME='Atom map charmm->amber atom order'
+CheckFor maxthreads 3
+if [ $? -eq 0 ] ; then
   cat > atommap.in <<EOF
 parm cg-amb.topo
 reference cg-amb.crds
@@ -70,6 +77,17 @@ trajout mapped.pdb pdb multi
 EOF
   RunCpptraj "Atom map charmm->amber atom order"
   DoTest map.chm_to_amb.dat.save map.chm_to_amb.dat
+
+  # Test 4
+  cat > atommap.in <<EOF
+parm cg-amb.topo
+reference cg-amb.crds
+parm cg-chm.topo
+reference cg-chm.crds parmindex 1
+atommap cg-amb.crds cg-chm.crds mapout map.byres.chm_to_amb.dat maponly mode byres
+EOF
+  RunCpptraj "Atom map charmm->amber atom order, by residue"
+  DoTest map.chm_to_amb.dat.save map.byres.chm_to_amb.dat
 fi
 EndTest
 

@@ -4,14 +4,16 @@
 
 CleanFiles cluster.in random.out random.info.dat random.summary.dat \
            random.crd.c? random.cpop.agr random.rep.*.pdb CpptrajPairDist
-CheckNetcdf
+TESTNAME='Cluster tests with random sieves'
+#Requires netcdf
 PREFIX="random"
 INPUT="-i cluster.in"
 
 Ctest() {
   cat > cluster.in <<EOF
 parm ../tz2.parm7
-trajin ../tz2.nc
+trajin ../tz2.crd
+random setdefault marsaglia
 cluster crd1 @CA clusters 5 rms out $PREFIX.out includesieved_cdist \
         sieve 5 random sieveseed 1 includesieveincalc \
         summary $PREFIX.summary.dat info $PREFIX.info.dat bestrep cumulative \

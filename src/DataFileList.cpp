@@ -3,12 +3,21 @@
 #include "CpptrajStdio.h"
 #include "PDBfile.h"
 #include "StringRoutines.h" // integerToString
+#include "ArgList.h"
 #ifdef TIMER
 # include "Timer.h"
 #endif
 
 // CONSTRUCTOR
-DataFileList::DataFileList() : debug_(0), ensembleNum_(-1) {}
+DataFileList::DataFileList() :
+  debug_(0),
+  ensembleNum_(-1),
+# ifdef MPI
+  ensembleExt_(true)
+# else
+  ensembleExt_(false)
+# endif
+{}
 
 // DESTRUCTOR
 DataFileList::~DataFileList() { Clear(); }
@@ -89,6 +98,17 @@ DataFile* DataFileList::AddDataFile(FileName const& nameIn, DataFile::DataFormat
   return AddDataFile( nameIn, args, typeIn );
 }
 
+/** This version can have default arguments passed in. */
+DataFile* DataFileList::AddDataFile(FileName const& nameIn, ArgList const& default_args,
+                                    ArgList& argIn)
+{
+  ArgList args = default_args;
+  DataFile* df = AddDataFile( nameIn, args, DataFile::UNKNOWN_DATA );
+  if (df != 0 && !argIn.empty())
+    df->ProcessArgs( argIn );
+  return df;
+}
+
 /** Create new DataFile, or return existing DataFile. */
 DataFile* DataFileList::AddDataFile(FileName const& nameIn, ArgList& argIn,
                                     DataFile::DataFormatType typeIn)
@@ -98,8 +118,6 @@ DataFile* DataFileList::AddDataFile(FileName const& nameIn, ArgList& argIn,
   FileName fname( nameIn );
   // Append ensemble number if set.
   //rprintf("DEBUG: Setting up data file '%s' with ensembleNum %i\n", nameIn.base(), ensembleNum_);
-  if (ensembleNum_ != -1)
-    fname.Append( "." + integerToString(ensembleNum_) );
   // Check if filename in use by CpptrajFile.
   CpptrajFile* cf = GetCpptrajFile(fname);
   if (cf != 0) {
@@ -112,6 +130,7 @@ DataFile* DataFileList::AddDataFile(FileName const& nameIn, ArgList& argIn,
   // If no DataFile associated with name, create new DataFile
   if (Current==0) {
     Current = new DataFile();
+    Current->SetEnsExt( ensembleExt_ );
     if (Current->SetupDatafile(fname, argIn, typeIn, debug_)) {
       mprinterr("Error: Setting up data file %s\n", fname.full());
       delete Current;
@@ -129,7 +148,7 @@ DataFile* DataFileList::AddDataFile(FileName const& nameIn, ArgList& argIn,
       return 0;
     }
     // Check for keywords that do not match file type
-    DataFile::DataFormatType kType = DataFile::GetFormatFromArg( argIn );
+    DataFile::DataFormatType kType = DataFile::WriteFormatFromArg( argIn, DataFile::UNKNOWN_DATA );
     if (kType != DataFile::UNKNOWN_DATA && kType != Current->Type())
       mprintf("Warning: %s is type %s but type %s keyword specified; ignoring keyword.\n",
               Current->DataFilename().full(), Current->FormatString(),
@@ -162,23 +181,69 @@ CpptrajFile* DataFileList::AddCpptrajFile(FileName const& nameIn,
                                           std::string const& descrip, CFtype typeIn)
 { return AddCpptrajFile(nameIn, descrip, typeIn, false); }
 
+#ifdef MPI
+/** Add CpptrajFile in parallel. Default to null Comm. */
+CpptrajFile* DataFileList::AddCpptrajFile(FileName const& nameIn, 
+                                          std::string const& descrip,
+                                          CFtype typeIn, bool allowStdout)
+{
+  return AddCpptrajFile(nameIn, descrip, typeIn, allowStdout, Parallel::Comm());
+}
+#endif
+
 /** Create new CpptrajFile of the given type, or return existing CpptrajFile.
   * STDOUT will be used if name is empty and STDOUT is allowed.
   */
 // TODO: Accept const ArgList so arguments are not reset?
 CpptrajFile* DataFileList::AddCpptrajFile(FileName const& nameIn, 
                                           std::string const& descrip,
-                                          CFtype typeIn, bool allowStdout)
+                                          CFtype typeIn, bool allowStdout
+#                                         ifdef MPI
+                                          , Parallel::Comm const& commIn
+#                                         endif
+                                         )
 {
   // If no filename and stdout not allowed, no output desired.
   if (nameIn.empty() && !allowStdout) return 0;
   FileName name;
   CpptrajFile* Current = 0;
   int currentIdx = -1;
+
+  bool appendExt;
+# ifdef MPI
+  bool openShared;
+# endif
+  if (ensembleNum_ == -1) {
+    // No extension to append - ignore ensembleExt_
+    appendExt = false;
+#   ifdef MPI
+    // Open shared if input comm is not null.
+    openShared = (!commIn.IsNull());
+#   endif
+  } else {
+    if (ensembleExt_) {
+      appendExt = true;
+#     ifdef MPI
+      openShared = false;
+#     endif
+    } else {
+      appendExt = false;
+#     ifdef MPI
+      if (commIn.IsNull()) {
+        appendExt = true;
+        openShared = false;
+      } else {
+        appendExt = false;
+        openShared = true;
+      }
+#     endif
+    }
+  }
+
   if (!nameIn.empty()) {
     name = nameIn;
     // Append ensemble number if set.
-    if (ensembleNum_ != -1)
+    if (appendExt)
       name.Append( "." + integerToString(ensembleNum_) );
     // Check if filename in use by DataFile.
     DataFile* df = GetDataFile(name);
@@ -200,7 +265,20 @@ CpptrajFile* DataFileList::AddCpptrajFile(FileName const& nameIn,
     Current->SetDebug(debug_);
     // Set up file for writing. 
     //if (Current->SetupWrite( name, debug_ ))
+#   ifdef MPI
+    int err = 0;
+    if (openShared) {
+      //rprintf("DEBUG: Opening '%s' shared.\n", name.full());
+      // File is being shared by different threads
+      Current->SetupWrite( name, debug_ );
+      // true here means open for shared write
+      err = Current->ParallelOpenFile(commIn, true);
+    } else
+      err = Current->OpenWrite( name );
+    if (err != 0)
+#   else
     if (Current->OpenWrite( name ))
+#   endif
     {
       mprinterr("Error: Setting up text output file %s\n", name.full());
       delete Current;
@@ -262,6 +340,34 @@ void DataFileList::WriteAllDF() {
 # endif
 }
 
+#ifdef MPI
+// DataFileList::WriteAllDF()
+/** Call write for all DataFiles in list for which writeFile is true. Once
+  * a file has been written set writeFile to false; it can be reset to
+  * true if new DataSets are added to it. All threads are allowed to try
+  * writing files. FIXME this is a hack until a better way of determining
+  * write threads is found.
+  */
+void DataFileList::AllThreads_WriteAllDF() {
+  if (fileList_.empty()) return;
+# ifdef TIMER
+  Timer datafile_time;
+  datafile_time.Start();
+# endif
+  for (DFarray::iterator df = fileList_.begin(); df != fileList_.end(); ++df) {
+    if ( (*df)->DFLwrite() ) {
+      (*df)->SetThreadCanWrite( true );
+      (*df)->WriteDataOut();
+      (*df)->SetDFLwrite( false );
+    }
+  }
+# ifdef TIMER
+  datafile_time.Stop();
+  mprintf("TIME: Write of all data files took %.4f seconds.\n", datafile_time.Total());
+# endif
+}
+#endif
+
 // DataFileList::UnwrittenData()
 bool DataFileList::UnwrittenData() const {
   for (DFarray::const_iterator df = fileList_.begin(); df != fileList_.end(); ++df)
@@ -276,27 +382,50 @@ void DataFileList::ResetWriteStatus() {
     (*df)->SetDFLwrite( true );
 }
 
+/** Check all DataFiles for sets in the given DataSetList. For DataFiles
+  * that contain any of these sets, reset their write status.
+  */
+void DataFileList::ResetWriteStatIfContain(std::vector<DataSet*> const& setsIn) {
+  for (DFarray::iterator df = fileList_.begin(); df != fileList_.end(); ++df)
+    if ( (*df)->ContainsAnyOfSets( setsIn ) )
+      (*df)->SetDFLwrite( true );
+}
+
 // DataFileList::ProcessDataFileArgs()
 /** Process command relating to data files. */
 int DataFileList::ProcessDataFileArgs(ArgList& dataArg) {
   // Next string is DataFile name that command will be passed to.
-  std::string df_cmd = dataArg.GetStringNext();
-  if (df_cmd.empty()) {
+  std::string df_name = dataArg.GetStringNext();
+  if (df_name.empty()) {
     mprintf("Warning: datafile: No filename given.\n");
     return 0;
   }
   // Check for deprecated commands
-  if (df_cmd == "create" || df_cmd == "precision") 
-    mprintf("Warning: 'datafile %s' is deprecated; use %s instead.\n", 
-            df_cmd.c_str(), df_cmd.c_str());
+  if (df_name == "create" || df_name == "precision") 
+    mprintf("Warning: 'datafile %s' is deprecated; use '%s' instead.\n", 
+            df_name.c_str(), df_name.c_str());
   //mprintf("  [%s]\n",(*dataArg).ArgLine());
-  DataFile* df = GetDataFile( df_cmd.c_str() );
-  if (df == 0) {
-    mprinterr("Error: datafile: File %s not found.\n", df_cmd.c_str());
-    return 1;
+  int err = 0;
+  if ( df_name == "*" ) {
+    // All data files
+    ArgList df_args = dataArg.RemainingArgs();
+    for (DFarray::const_iterator it = fileList_.begin(); it != fileList_.end(); ++it)
+    {
+      ArgList args = df_args;
+      // Process command
+      err += (*it)->ProcessArgs( args );
+      if (args.CheckForMoreArgs()) err++;
+    }
+  } else {
+    // Single data file
+    DataFile* df = GetDataFile( df_name );
+    if (df == 0) {
+      mprinterr("Error: File '%s' not found.\n", df_name.c_str());
+      return 1;
+    }
+    // Process command
+    err = df->ProcessArgs( dataArg );
+    if (dataArg.CheckForMoreArgs()) err = 1;
   }
-  // Process command
-  int err = df->ProcessArgs( dataArg );
-  if (err != 0 || dataArg.CheckForMoreArgs()) return 1;
-  return 0;
+  return err;
 }

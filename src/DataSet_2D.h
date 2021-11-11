@@ -12,7 +12,7 @@ class DataSet_2D : public DataSet {
       DataSet(tIn, MATRIX_2D, fIn, 2) {}
     // TODO enable Append?
     int Append(DataSet*) { return 1; }
-    int Allocate(SizeArray const& s) { return Allocate2D(s[0], s[1]); } // FIXME bounds check
+    int Allocate(SizeArray const& s) { return Allocate2D(s[0], s[1]); }
     // TODO: 1 allocate using MatrixKind?
     /// Set up matrix for given # columns and rows. // TODO replace with Allocate
     virtual int Allocate2D(size_t, size_t) = 0;
@@ -20,6 +20,8 @@ class DataSet_2D : public DataSet {
     virtual int AllocateHalf(size_t) = 0;
     /// Set up symmetrix matrix with no diagonal.
     virtual int AllocateTriangle(size_t) = 0;
+    /// Add given value to element at specified col/row
+    virtual void UpdateElement(size_t, size_t, double) = 0;
     /// \return Data from matrix at col/row 
     virtual double GetElement(size_t, size_t) const = 0;
     /// \return Data from underlying matrix array.

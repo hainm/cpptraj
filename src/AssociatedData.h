@@ -1,8 +1,10 @@
 #ifndef INC_ASSOCIATEDDATA_H
 #define INC_ASSOCIATEDDATA_H
-#include "ArgList.h"
+class ArgList;
 class AssociatedData {
   public:
+    /// Destructor. Virtual since this class is inherited.
+    virtual ~AssociatedData() {}
     enum AssociatedType { NOE = 0 };
     AssociatedData(AssociatedType t) : type_(t) {}
     AssociatedType Type() { return type_; }

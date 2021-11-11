@@ -1,8 +1,10 @@
 #ifndef INC_DATAFILELIST_H
 #define INC_DATAFILELIST_H
 #include "DataFile.h"
-#include "DataSet.h"
-#include "ArgList.h"
+class DataSet;
+class ArgList;
+class FileName;
+class CpptrajFile;
 /// Holds a list of output DataFiles/CpptrajFiles.
 /** The DataFileList is meant to hold all output data files defined by any
   * Actions or Analysis. This allows multiple sets to be directed to the
@@ -17,13 +19,17 @@ class DataFileList {
     DataFile* RemoveDataFile(DataFile*);
     void RemoveDataSet(DataSet*);
     void SetDebug(int);
-    void SetEnsembleNum(int i) { ensembleNum_ = i; }
+    void SetEnsembleNum(int i) { ensembleNum_ = i; } // TODO get rid of this
+    void SetEnsExtension(bool b) { ensembleExt_ = b; }
+    bool UseEnsExtension() const { return ensembleExt_; }
     /// \return DataFile whose full path matches given string or 0.
     DataFile* GetDataFile(FileName const&) const;
     /// \return CpptrajFile whose full path matches given string or 0.
     CpptrajFile* GetCpptrajFile(FileName const&) const;
     /// \return DataFile specified by name, add if none exists, or 0 if no name specified.
     DataFile* AddDataFile(FileName const&, ArgList&);
+    /// Allow default arguments.
+    DataFile* AddDataFile(FileName const&, ArgList const&, ArgList&);
     /// \return DataFile specified by name, add if none exists, or 0 if no name specified.
     DataFile* AddDataFile(FileName const&);
     /// \return DataFile specified by name with specific format, add if none exists.
@@ -38,13 +44,21 @@ class DataFileList {
     CpptrajFile* AddCpptrajFile(FileName const&,std::string const&,CFtype);
     /// Add/create CpptrajFile of given type; optionally allow STDOUT.
     CpptrajFile* AddCpptrajFile(FileName const&,std::string const&,CFtype,bool);
+#   ifdef MPI
+    CpptrajFile* AddCpptrajFile(FileName const&,std::string const&,CFtype,bool,Parallel::Comm const&);
+    void AllThreads_WriteAllDF();
+#   endif
     /// List DataFiles and CpptrajFiles.
     void List() const;
     /// Write all DataFiles in list that have not yet been written.
     void WriteAllDF();
     /// \return true if DataFiles have not yet been written.
     bool UnwrittenData() const;
+    /// Reset the write status of all DataFiles so they will be written
     void ResetWriteStatus();
+    /// Reset the write status of DataFiles containing any of the input sets.
+    void ResetWriteStatIfContain(std::vector<DataSet*> const& dslIn);
+    /// Process any data file args
     int ProcessDataFileArgs(ArgList&);
     int Debug() const { return debug_; }
     int EnsembleNum() const { return ensembleNum_; }
@@ -63,7 +77,8 @@ class DataFileList {
     MDarray cfData_;
 
     int debug_;
-    int ensembleNum_; ///< Ensemble member number.
+    int ensembleNum_;  ///< Ensemble member number.
+    bool ensembleExt_; ///< If true append ensemble member number to file names.
 };
 // ----- INTERNAL CLASS DEFINITIONS --------------------------------------------
 class DataFileList::CFstruct {

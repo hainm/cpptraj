@@ -1,6 +1,7 @@
 #ifndef INC_ATOMMASK_H
 #define INC_ATOMMASK_H
 #include "MaskToken.h"
+class Unit;
 /// Atom mask using integer array. 
 /** AtomMask is used to hold an array of integers that represent atom numbers
   * of atoms selected based on a mask expression set via SetMaskString. 
@@ -23,10 +24,16 @@ class AtomMask : public MaskTokenArray {
                                                  maskChar_(SelectedChar_) {}
     /// Create mask selecting atoms from begin up to (not including) end.
     AtomMask(int,int);
+    /// Create mask selecting atoms in unit
+    AtomMask(Unit const&);
     /// Create mask with single atom selected.
     AtomMask(int);
     /// \return Internal selected atom array.
     std::vector<int> const& Selected()  const { return Selected_;             }
+    /// \return true if masks select the same atoms
+    bool operator==(AtomMask const&) const;
+    /// \return true if masks do not select the same atoms.
+    bool operator!=(AtomMask const&) const;
     /// AtomMask default iterator
     typedef std::vector<int>::const_iterator const_iterator;
     /// \return const iterator to the beginning of Selected
@@ -37,12 +44,14 @@ class AtomMask : public MaskTokenArray {
     int back()                          const { return Selected_.back();      }
     /// \return selected atom at idx
     const int& operator[](int idx)      const { return Selected_[idx];        }
+    /// \return Number of atoms from corresponding topology.
+    int NmaskAtoms()                    const { return Natom_;                }
     /// Flip current mask expression.
     void InvertMaskExpression();
     /// Invert current mask
     void InvertMask();
     /// \return the number of atoms mask has in common with another mask
-    int NumAtomsInCommon(AtomMask const&);
+    int NumAtomsInCommon(AtomMask const&) const;
     /// Add atom to Selected array; assumes atoms will be in order.
     void AddSelectedAtom(int i) { Selected_.push_back( i ); }
     /// Add given atom to Selected array 
@@ -51,6 +60,8 @@ class AtomMask : public MaskTokenArray {
     void AddAtoms(std::vector<int> const&);
     /// Add minAtom <= atom < maxAtom to mask
     void AddAtomRange(int,int);
+    /// Add atoms in given unit to mask
+    void AddUnit(Unit const&);
     /// Add atoms in given mask to this mask at positon, update position
     void AddMaskAtPosition(AtomMask const&, int);
     /// Convert from integer mask to char mask.
@@ -61,7 +72,7 @@ class AtomMask : public MaskTokenArray {
     /// Print all mask atoms in to a line
     void PrintMaskAtoms(const char*) const;
     /// Set up integer mask based on current mask expression. 
-    int SetupMask(AtomArrayT const&, ResArrayT const&, const double*);
+    int SetupMask(AtomArrayT const&, ResArrayT const&, MolArrayT const&, const double*);
     /// Reset atom mask
     void ResetMask();
     /// Clear any selected atoms in mask.

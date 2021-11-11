@@ -2,22 +2,20 @@
 
 . ../MasterTest.sh
 
-if [[ ! -e Restart ]] ; then
+# Clean
+CleanFiles general.in distance.dat rmsd.dat rmsda.dat phi2.dat PhiPsi.dat \
+           test.crd a1.dat Restart/* Restart test.nc r4.dat a2.dat.gz \
+           a3.dat.bz2 r2.dat r3-nofit.dat r5.dat
+
+TESTNAME='General tests'
+# Required environment 
+Requires notparallel netcdf zlib bzlib
+
+
+
+if [ ! -e 'Restart' ] ; then
   mkdir Restart
 fi
-
-# Clean
-CleanFiles general.in distance.dat rmsd.dat rmsda.dat phi2.dat PhiPsi.dat test.crd a1.dat Restart/* test.nc r4.dat a2.dat.gz a3.dat.bz2 r2.dat r3-nofit.dat
-
-NotParallel "General tests"
-if [[ $? -eq 1 ]] ; then
-  EndTest
-  exit 0
-fi
-# Check libraries
-CheckNetcdf
-CheckZlib
-CheckBzlib
 
 cat > general.in <<EOF
 noprogress
@@ -32,7 +30,6 @@ reference ../tz2.rst7
 angle a1 :2@CA :3@CA :4@CA out a1.dat
 angle a2 :2@CA :3@CA :4@CA out a2.dat.gz
 angle a3 :2@CA :3@CA :4@CA out a3.dat.bz2
-#rmsd r4 first out r4.dat :2-10 nofit
 rmsd r1 ref tz2.rst7 out rmsd.dat
 rmsd r1a refindex 0 out rmsda.dat
 rmsd r2 :1-4@C,CA,N ref tz2.rst7 :1-4@C,CA,N out r2.dat
@@ -56,6 +53,7 @@ trajin ../tz2.crd   \
 3 \
 2
 
+rmsd r5 first out r5.dat :2-5@N,CA,C nomod
 EOF
 
 INPUT="general.in"
@@ -73,14 +71,17 @@ DoTest test.rst7.213.save Restart/test.rst7.213
 NcTest test.nc.save test.nc
 DoTest r4.dat.save r4.dat
 # NOTE: a2.dat.gz comparison allowed to fail on windows; differences caused
-#       by different newline characters in compressed file.
-if [[ $TEST_OS != "windows" ]] ; then
+#       by different newline characters in compressed file. Macs also seem to
+#       occasionally fail this test, even though decompressed diffs are the same
+UNITNAME='Gzipped output data file comparison'
+CheckFor testos Linux
+if [ $? -eq 0 ] ; then
   DoTest a2.dat.gz.save a2.dat.gz
 fi
 DoTest a3.dat.bz2.save a3.dat.bz2
 DoTest r2.dat.save r2.dat
 DoTest r3-nofit.dat.save r3-nofit.dat
-CheckTest
+DoTest r5.dat.save r5.dat
 
 EndTest
 

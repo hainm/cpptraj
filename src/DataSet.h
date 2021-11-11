@@ -22,15 +22,17 @@ class DataSet {
   public:
     typedef DataSet* (*AllocatorType)();
     typedef std::vector<size_t> SizeArray;
-    /// DataSet base type. 
+    /// DataSet base type.
+    /** When adding new entries make sure that Descriptions_ is updated. */ 
     enum DataType {
       UNKNOWN_DATA=0, DOUBLE, FLOAT, INTEGER, STRING, MATRIX_DBL, MATRIX_FLT, 
-      COORDS, VECTOR, MODES, GRID_FLT, REMLOG, XYMESH, TRAJ, REF_FRAME,
-      MAT3X3, TOPOLOGY, CMATRIX, CMATRIX_NOMEM, CMATRIX_DISK
+      COORDS, VECTOR, MODES, GRID_FLT, GRID_DBL, REMLOG, XYMESH, TRAJ, REF_FRAME,
+      MAT3X3, TOPOLOGY, PH, PH_EXPL, PH_IMPL,
+      PARAMETERS, PMATRIX_MEM, PMATRIX_NC, TENSOR, STRINGVAR, VECTOR_SCALAR, UNSIGNED_INTEGER
     };
     /// Group DataSet belongs to.
     enum DataGroup {
-      GENERIC=0, SCALAR_1D, MATRIX_2D, GRID_3D, COORDINATES, CLUSTERMATRIX
+      GENERIC=0, SCALAR_1D, MATRIX_2D, GRID_3D, COORDINATES, PHREMD, PWCACHE, VECTOR_1D
     };
 
     DataSet();
@@ -38,19 +40,24 @@ class DataSet {
     DataSet(DataType,DataGroup,TextFormat const&,int);
     DataSet(const DataSet&);
     DataSet& operator=(const DataSet&);
-    virtual ~DataSet() {} // Destructor - virtual since this class is inherited
+    /// Destructor. Virtual since this class is inherited.
+    virtual ~DataSet();
     // ----------===== Inheritable functions =====----------
     /// \return the number of data elements stored in the DataSet.
     virtual size_t Size() const = 0;
+    /// \return SizeArray containing sizes in each dimension TODO pure virtual
+    virtual SizeArray DimSizes() const { return SizeArray(); }
     /// Print DataSet information //TODO return string instead?
     virtual void Info() const = 0;
-    /// Write data to file given start indices. FIXME Buffer? Should this function take number of elements as well?
+    /// Write data to file given start indices.
     virtual void WriteBuffer(CpptrajFile&, SizeArray const&) const = 0;
     /// \return value of coordinate for specified dimension d and position p.
     /** NOTE: It is assumed this can ALWAYS be represented as double precision. */
     virtual double Coord(unsigned int d, size_t p) const { return dim_[d].Coord(p); }
-    /// Allocate data given numbers of elements.
+    /// Reserve memory for given number(s) of elements. TODO rename?
     virtual int Allocate(SizeArray const&) = 0;
+    /// Actually allocate memory for given number(s) of elements TODO pure virtual?
+    virtual int MemAlloc(SizeArray const&) { return 1; }
     /// Add element to data set.
     /** A pointer to the data is passed in as void - it is up to the
       * inheriting class to cast it. The X value for the data is passed
@@ -61,10 +68,16 @@ class DataSet {
     virtual void Add( size_t, const void* ) = 0;
     /// Can be used to append given data set to this one.
     virtual int Append(DataSet*) = 0;
-    // TODO SizeInMB?
+    /// \return Size of data set in memory (in bytes).
+    virtual size_t MemUsageInBytes() const = 0;
+    /// Copy a block to position in this set from given set OF SAME TYPE using specified position and size TODO pure virtual
+    virtual void CopyBlock(size_t, const DataSet*, size_t, size_t) {}
 #   ifdef MPI
-    /// Consolidate this DataSet across all threads (MPI only)
+    /// Piece this DataSet together from multiple threads.
     virtual int Sync(size_t, std::vector<int> const&, Parallel::Comm const&) = 0;
+    // TODO pure virtual
+    virtual int SendSet(int, Parallel::Comm const&) { return 1; }
+    virtual int RecvSet(int, Parallel::Comm const&) { return 1; }
 #   endif
     // -----------------------------------------------------
     /// Associate additional data with this set.
@@ -117,6 +130,10 @@ class DataSet {
         return *first < *second;
       }
     };
+    /// \return Text description based on given DataType
+    static const char* description(DataType t) { return Descriptions_[t]; }
+    /// \return Text description based on current DataType
+    const char* description() const            { return Descriptions_[dType_]; }
   protected:
     TextFormat format_;         ///< Text output data format.
   private:
@@ -125,6 +142,13 @@ class DataSet {
     /// Type to hold any additional data associated with this data set.
     typedef std::vector<AssociatedData*> AdataArray;
 
+    /// Clear any associated data.
+    void ClearAssociatedData();
+    /// Text descriptions of DataType
+    static const char* Descriptions_[];
+    // FIXME dim_ and associated functions like Coord need to be reworked
+    //       depending on the set type. For example, dim_ doesnt really work
+    //       for non-orthogonal grids.
     DimArray dim_;              ///< Holds info for each dimension in the DataSet.
     AdataArray associatedData_; ///< Holds any additonal data associated with this DataSet
     DataType dType_;            ///< The DataSet type

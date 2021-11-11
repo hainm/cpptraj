@@ -2,9 +2,9 @@
 #include "CpptrajStdio.h"
 
 void Exec_ReadData::Help() const {
-  mprintf("\t<filename> [name <dsname>] [as <fmt>] [<format options>]\n"
-          "  Read data from <filename> into data sets.\n");
-  DataFile::ReadOptions();
+  mprintf("\t<filename> [name <dsname>] [as <fmt>] [separate] [<format options>]\n"
+          "  Read data from <filename> into data sets.\n"
+          "  Use 'help Formats readdata' for help with specific formats.\n");
 }
 
 Exec::RetType Exec_ReadData::Execute(CpptrajState& State, ArgList& argIn) {
@@ -17,8 +17,11 @@ Exec::RetType Exec_ReadData::Execute(CpptrajState& State, ArgList& argIn) {
     return CpptrajState::ERR;
   }
   int err = 0;
+  int idx = -1;
+  bool useIndex = argIn.hasKey("separate");
   for (File::NameArray::const_iterator fn = fnames.begin(); fn != fnames.end(); ++fn) {
-    if (dataIn.ReadDataIn( *fn, argIn, State.DSL() )!=0) {
+    if (useIndex) idx++;
+    if (dataIn.ReadDataIn( *fn, argIn, State.DSL(), idx, fnames.size() )!=0) {
       mprinterr("Error: Could not read data file '%s'.\n", fn->full());
       err++;
     }

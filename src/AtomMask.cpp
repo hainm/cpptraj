@@ -1,14 +1,21 @@
 #include <algorithm> // sort, unique
 #include "AtomMask.h"
 #include "CpptrajStdio.h"
+#include "Unit.h"
 
-// CONSTRUCTOR
+/** CONSTRUCTOR - atom range; Natom_ will be set by AddAtomRange */
 AtomMask::AtomMask(int beginAtom, int endAtom) : Natom_(0), maskChar_(SelectedChar_)
 {
   AddAtomRange(beginAtom, endAtom);
 }
 
-// CONSTRUCTOR
+/** CONSTRUCTOR - unit; Natom_ will be set by AddAtomRange via AddUnit */
+AtomMask::AtomMask(Unit const& unit) : Natom_(0), maskChar_(SelectedChar_)
+{
+  AddUnit( unit );
+}
+
+/** CONSTRUCTOR - single atom */
 AtomMask::AtomMask(int atomNum) : Selected_(1, atomNum), Natom_(1), maskChar_(SelectedChar_) {}
 
 // AtomMask::ResetMask()
@@ -16,6 +23,24 @@ void AtomMask::ResetMask() {
   Natom_ = 0;
   Selected_.clear();
   ClearTokens();
+}
+
+/** \return true if masks select the same atoms. */
+bool AtomMask::operator==(AtomMask const& rhs) const {
+  if (Selected_.size() != rhs.Selected_.size()) return false;
+  for (unsigned int idx = 0; idx != Selected_.size(); idx++) {
+    if (Selected_[idx] != rhs.Selected_[idx]) return false;
+  }
+  return true;
+}
+
+/** \return true if masks are not equal. */
+bool AtomMask::operator!=(AtomMask const& rhs) const {
+  if (Selected_.size() != rhs.Selected_.size()) return true;
+  for (unsigned int idx = 0; idx != Selected_.size(); idx++) {
+    if (Selected_[idx] != rhs.Selected_[idx]) return true;
+  }
+  return false;
 }
 
 /** Flip the current character used to select atoms. Useful when you want 
@@ -30,6 +55,11 @@ void AtomMask::InvertMaskExpression() {
 
 // AtomMask::InvertMask()
 void AtomMask::InvertMask() {
+  // Sanity check
+  if (Natom_ < 1) {
+    mprinterr("Internal Error: AtomMask::InvertMask() called with Natom_ < 1.\n");
+    return;
+  }
   // Invert the integer mask.
   std::vector<int> invert;
   invert.reserve( Natom_ - (int)Selected_.size() );
@@ -50,7 +80,7 @@ void AtomMask::InvertMask() {
 /** Given an atom mask, determine how many selected atoms this mask
   * has in common with it.
   */
-int AtomMask::NumAtomsInCommon(AtomMask const& maskIn) {
+int AtomMask::NumAtomsInCommon(AtomMask const& maskIn) const {
   std::vector<int> intersect;
   std::vector<int>::iterator intersect_end;
 
@@ -95,6 +125,9 @@ void AtomMask::AddAtom(int atomIn) {
   }
   // Add atom to mask
   Selected_.push_back(atomIn);
+  // Update Natom_ if necessary
+  if (Selected_.back() >= Natom_)
+    Natom_ = Selected_.back() + 1;
 }
 
 // AtomMask::AddAtoms()
@@ -113,6 +146,9 @@ void AtomMask::AddAtoms(std::vector<int> const& atomsIn) {
   // Remove duplicates
   atom = unique( Selected_.begin(), Selected_.end() );
   Selected_.resize( atom - Selected_.begin() );
+  // Update Natom_ if necessary
+  if (Selected_.back() >= Natom_)
+    Natom_ = Selected_.back() + 1;
 }
 
 // AtomMask::AddAtomRange()
@@ -133,6 +169,15 @@ void AtomMask::AddAtomRange(int minAtom, int maxAtom) {
   //for (std::vector<int>::iterator da = Selected_.begin(); da != Selected_.end(); da++)
   //  mprintf(" %i",*da);
   //mprintf("]\n");
+  // Update Natom_ if necessary
+  if (Selected_.back() >= Natom_)
+    Natom_ = Selected_.back() + 1;
+}
+
+/** Add atoms in given unit to mask. */
+void AtomMask::AddUnit(Unit const& unitIn) {
+  for (Unit::const_iterator it = unitIn.segBegin(); it != unitIn.segEnd(); ++it)
+    AddAtomRange( it->Begin(), it->End() );
 }
 
 // AtomMask::AddMaskAtPosition()
@@ -155,6 +200,7 @@ void AtomMask::PrintMaskAtoms(const char *header) const {
       mprintf(" %i",*atom + 1);
   } else 
     mprintf("No atoms selected.");
+  mprintf("\n");
 }
 
 /** Set up an atom mask containing selected atom numbers given a char
@@ -163,14 +209,15 @@ void AtomMask::PrintMaskAtoms(const char *header) const {
   * maskChar_ is used to determine whether atoms denoted by 'T' or 'F' will
   * be selected (the latter is the case e.g. with stripped atoms). 
   */
-int AtomMask::SetupMask(AtomArrayT const& atoms, ResArrayT const& residues, const double* XYZ)
+int AtomMask::SetupMask(AtomArrayT const& atoms, ResArrayT const& residues,
+                        MolArrayT const& molecules, const double* XYZ)
 {
   // Set up an integer list of the selected atoms. 
   // NOTE: For large selections this will use 4x the memory of the char atom
   //       mask. Could check to see which will be bigger.
   Natom_ = (int)atoms.size();
   Selected_.clear();
-  char* charmask = ParseMask(atoms, residues, XYZ);
+  char* charmask = ParseMask(atoms, residues, molecules, XYZ);
   if (charmask == 0) return 1;
   for (int atom = 0; atom != Natom_; atom++) {
     if (charmask[atom] == maskChar_)

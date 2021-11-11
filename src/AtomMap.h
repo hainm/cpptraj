@@ -8,15 +8,15 @@ class AtomMap {
     AtomMap();
 
     MapAtom& operator[](int);
-    const MapAtom& operator[](int i) const { return mapatoms_[i]; } // FIXME: bounds
+    const MapAtom& operator[](int i) const { return mapatoms_[i]; }
     /// \return the number of atoms in the AtomMap.
     int Natom() const { return (int)mapatoms_.size(); }
     /// Set the debug level of the AtomMap.
     void SetDebug(int d) { debug_ = d; }
     /// Setup AtomMap with all atoms from input Topology.
-    int Setup(Topology const&);
+    int Setup(Topology const&, Frame const&);
     /// Setup AtomMap with just atoms from specified Residue.
-    int SetupResidue(Topology const&,int);
+    int SetupResidue(Topology const&, Frame const&, int);
     /// Reset any previously set mapping information.
     void ResetMapping();
     bool BondIsRepeated(int,int) const;

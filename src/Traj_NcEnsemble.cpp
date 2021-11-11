@@ -1,8 +1,13 @@
 #ifdef BINTRAJ
 #ifdef ENABLE_SINGLE_ENSEMBLE
 #include "Traj_NcEnsemble.h"
+#include "Topology.h"
+#include "ArgList.h"
+#include "Frame.h"
+#include "CpptrajFile.h"
 #include "CpptrajStdio.h"
 #include "NC_Routines.h"
+#include "FrameArray.h"
 #ifdef MPI
 # include "Parallel.h"
 #endif
@@ -37,7 +42,7 @@ void Traj_NcEnsemble::ReadHelp() {
 }
 
 // Traj_NcEnsemble::processWriteArgs()
-int Traj_NcEnsemble::processWriteArgs(ArgList& argIn) {
+int Traj_NcEnsemble::processWriteArgs(ArgList& argIn, DataSetList const&) {
   //SetTemperature(argIn.hasKey("remdtraj"));
   //SetVelocity(argIn.hasKey("velocity"));
   return 0;
@@ -103,68 +108,25 @@ int Traj_NcEnsemble::setupTrajin(FileName const& fname, Topology* trajParm)
 # endif
   readAccess_ = true;
   filename_ = fname;
-  //if (openTrajin()) return TRAJIN_ERR;
-  // Open single thread for now
-  if (NC_openRead( filename_.Full() )) return TRAJIN_ERR;
-  // Sanity check - Make sure this is a Netcdf ensemble trajectory
-  if ( GetNetcdfConventions() != NC_AMBERENSEMBLE ) {
-    mprinterr("Error: Netcdf file %s conventions do not include \"AMBERENSEMBLE\"\n",
-              filename_.base());
+  // NOTE: Setup opens and closes single thread for now
+  // Setup for Amber NetCDF ensemble
+  if ( NC_setupRead(filename_.Full(), NC_AMBERENSEMBLE, trajParm->Natom(),
+                    useVelAsCoords_, useFrcAsCoords_, debug_) )
     return TRAJIN_ERR;
-  }
-  // This will warn if conventions are not 1.0 
-  CheckConventionsVersion();
   // Get title
   SetTitle( GetNcTitle() );
-  // Get Frame info
-  if ( SetupFrameDim()!=0 ) return TRAJIN_ERR;
-  if ( Ncframe() < 1 ) {
-    mprinterr("Error: Netcdf file is empty.\n");
-    return TRAJIN_ERR;
-  }
-  // Get ensemble info
-  int ensembleSize = SetupEnsembleDim();
-  if (ensembleSize < 1) {
-    mprinterr("Error: Could not get ensemble dimension info.\n");
-    return TRAJIN_ERR;
-  }
-  // Setup Coordinates/Velocities
-  if ( SetupCoordsVelo( useVelAsCoords_, useFrcAsCoords_ )!=0 ) return TRAJIN_ERR;
-  // Check that specified number of atoms matches expected number.
-  if (Ncatom() != trajParm->Natom()) {
-    mprinterr("Error: Number of atoms in NetCDF file %s (%i) does not\n"
-              "Error:   match number in associated parmtop (%i)!\n",
-              filename_.base(), Ncatom(), trajParm->Natom());
-    return TRAJIN_ERR;
-  }
-  // Setup Time - FIXME: Allowed to fail silently
-  SetupTime();
-  // Box info
-  Box nc_box; 
-  if (SetupBox(nc_box, NC_AMBERENSEMBLE) == 1) // 1 indicates an error
-    return TRAJIN_ERR;
-  // Replica Temperatures - FIXME: Allowed to fail silently
-  SetupTemperature();
-  // Replica Dimensions
-  ReplicaDimArray remdDim;
-  if ( SetupMultiD(remdDim) == -1 ) return TRAJIN_ERR;
-  // Set traj info: FIXME - no forces yet
-  SetCoordInfo( CoordinateInfo(ensembleSize, remdDim, nc_box, HasVelocities(),
-                               HasTemperatures(), HasTimes(), false) ); 
-  if (debug_>1) NetcdfDebug();
-  //closeTraj();
-  // Close single thread for now
-  NC_close();
+  // Set coordinate info 
+  SetCoordInfo( NC_coordInfo() ); 
   // Set up local ensemble parameters
 # ifdef MPI
   ensembleStart_ = Parallel::World().Rank();
   ensembleEnd_ = Parallel::World().Rank() + 1;
 # else
   ensembleStart_ = 0;
-  ensembleEnd_ = ensembleSize;
+  ensembleEnd_ = ensembleSize_;
 # endif
   // DEBUG: Print info for all ranks
-  WriteVIDs();
+  DebugVIDs();
   // Allocate float array
   if (Coord_ != 0) delete[] Coord_;
   Coord_ = new float[ Ncatom3() ];
@@ -200,9 +162,9 @@ int Traj_NcEnsemble::setupTrajout(FileName const& fname, Topology* trajParm,
     if (Parallel::World().Master()) { // Only master creates file.
 #   endif
       // Create NetCDF file.
-      err = NC_create(filename_.Full(), NC_AMBERENSEMBLE, trajParm->Natom(), CoordInfo(), Title());
-      if (debug_ > 1 && err == 0) NetcdfDebug();
-      // Close Netcdf file. It will be reopened write.
+      err = NC_create(filename_.Full(), NC_AMBERENSEMBLE, trajParm->Natom(), CoordInfo(),
+                      Title(), debug_);
+      // Close Netcdf file. It will be reopened write. FIXME should NC_create leave it closed?
       NC_close();
 #   ifdef MPI
     }
@@ -210,10 +172,10 @@ int Traj_NcEnsemble::setupTrajout(FileName const& fname, Topology* trajParm,
 #   endif
     if (err != 0) return 1;
 #   ifdef MPI
-    // Synchronize netcdf info on non-master threads
-    Sync(Parallel::World());
+    // Broadcast netcdf info to non-master threads
+    Broadcast(Parallel::World());
     // DEBUG: Print info for all ranks
-    WriteVIDs();
+    DebugVIDs();
 #   endif
     // Allocate memory
     if (Coord_!=0) delete[] Coord_;
@@ -255,7 +217,7 @@ int Traj_NcEnsemble::writeFrame(int set, Frame const& frameOut) {
   return 1;
 }
 
-// Traj_NcEnsemble::readArray()
+// Traj_NcEnsemble::readArray() //TODO RemdValues
 int Traj_NcEnsemble::readArray(int set, FrameArray& f_ensemble) {
 # ifdef HAS_PNETCDF
   MPI_Offset pstart_[4];
@@ -307,24 +269,26 @@ int Traj_NcEnsemble::readArray(int set, FrameArray& f_ensemble) {
     // Read Box
     if (cellLengthVID_ != -1) {
       count_[2] = 3;
+      double xyzabg[6];
 #     ifdef HAS_PNETCDF
-      if (checkPNCerr(ncmpi_get_vara_double_all(ncid_, cellLengthVID_, start_, count_, frm.bAddress())))
+      if (checkPNCerr(ncmpi_get_vara_double_all(ncid_, cellLengthVID_, start_, count_, xyzabg)))
 #     else
-      if (NC::CheckErr(nc_get_vara_double(ncid_, cellLengthVID_, start_, count_, frm.bAddress())))
+      if (NC::CheckErr(nc_get_vara_double(ncid_, cellLengthVID_, start_, count_, xyzabg)))
 #     endif
       {
         rprinterr("Error: Getting cell lengths for frame %i.\n", set+1);
         return 1;
       }
 #     ifdef HAS_PNETCDF
-      if (checkPNCerr(ncmpi_get_vara_double_all(ncid_, cellAngleVID_, start_, count_, frm.bAddress()+3)))
+      if (checkPNCerr(ncmpi_get_vara_double_all(ncid_, cellAngleVID_, start_, count_, xyzabg+3)))
 #     else
-      if (NC::CheckErr(nc_get_vara_double(ncid_, cellAngleVID_, start_, count_, frm.bAddress()+3)))
+      if (NC::CheckErr(nc_get_vara_double(ncid_, cellAngleVID_, start_, count_, xyzabg+3)))
 #     endif
       {
         rprinterr("Error: Getting cell angles for frame %i.\n", set+1);
         return 1;
       }
+      frm.ModifyBox().AssignFromXyzAbg( xyzabg );
     }
     // Read Temperature
     if (TempVID_!=-1) {
@@ -368,7 +332,7 @@ int Traj_NcEnsemble::readArray(int set, FrameArray& f_ensemble) {
   return 0;
 }
 
-// Traj_NcEnsemble::writeArray()
+// Traj_NcEnsemble::writeArray() // TODO RemdValues
 int Traj_NcEnsemble::writeArray(int set, FramePtrArray const& Farray) {
 # ifdef HAS_PNETCDF
   MPI_Offset pstart_[4];
@@ -392,7 +356,7 @@ int Traj_NcEnsemble::writeArray(int set, FramePtrArray const& Farray) {
     start_[1] = member;   // Ensemble
     count_[2] = Ncatom(); // Atoms
     // Write Coords
-    //WriteIndices(); // DEBUG
+    //DebugIndices(); // DEBUG
     DoubleToFloat(Coord_, frm->xAddress());
 #   ifdef HAS_PNETCDF
     if (ncmpi_put_vara_float_all(ncid_, coordVID_, start_, count_, Coord_))
@@ -418,20 +382,22 @@ int Traj_NcEnsemble::writeArray(int set, FramePtrArray const& Farray) {
     }
     // Write box
     if (cellLengthVID_ != -1) {
+      if (!frm->BoxCrd().Is_X_Aligned())
+      mprintf("Warning: Set %i; unit cell is not X-aligned. Box cannot be properly stored as Amber NetCDF ensemble.\n", set+1);
       count_[2] = 3;
 #     ifdef HAS_PNETCDF
-      if (ncmpi_put_vara_double_all(ncid_,cellLengthVID_,start_,count_,frm->bAddress()))
+      if (ncmpi_put_vara_double_all(ncid_,cellLengthVID_,start_,count_,frm->BoxCrd().XyzPtr()))
 #     else
-      if (NC::CheckErr(nc_put_vara_double(ncid_,cellLengthVID_,start_,count_,frm->bAddress())) )
+      if (NC::CheckErr(nc_put_vara_double(ncid_,cellLengthVID_,start_,count_,frm->BoxCrd().XyzPtr())) )
 #     endif
       {
         mprinterr("Error: Writing cell lengths frame %i.\n", set+1);
         return 1;
       }
 #     ifdef HAS_PNETCDF
-      if (ncmpi_put_vara_double_all(ncid_,cellAngleVID_,start_,count_,frm->bAddress()+3))
+      if (ncmpi_put_vara_double_all(ncid_,cellAngleVID_,start_,count_,frm->BoxCrd().AbgPtr()))
 #     else
-      if (NC::CheckErr(nc_put_vara_double(ncid_,cellAngleVID_,start_,count_,frm->bAddress()+3)))
+      if (NC::CheckErr(nc_put_vara_double(ncid_,cellAngleVID_,start_,count_,frm->BoxCrd().AbgPtr())))
 #     endif
       {
         mprinterr("Error: Writing cell angles frame %i.\n", set+1);
@@ -481,10 +447,12 @@ int Traj_NcEnsemble::writeArray(int set, FramePtrArray const& Farray) {
 // Traj_NcEnsemble::Info()
 void Traj_NcEnsemble::Info() {
   mprintf("is a NetCDF Ensemble AMBER trajectory");
-  if (readAccess_ && !HasCoords()) mprintf(" (no coordinates)");
-  //if (HasV()) mprintf(" containing velocities");
-  //if (HasT()) mprintf(" with replica temperatures");
-  if (remd_dimension_ > 0) mprintf(", with %i dimensions", remd_dimension_);
+  if (readAccess_) {
+    mprintf(" with %s", CoordInfo().InfoString().c_str());
+    if (useVelAsCoords_) mprintf(" (using velocities as coordinates)");
+    if (useFrcAsCoords_) mprintf(" (using forces as coordinates)");
+    if (remd_dimension_ > 0) mprintf(", %i replica dimensions", remd_dimension_);
+  } 
 }
 #endif
 #endif

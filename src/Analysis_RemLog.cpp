@@ -23,9 +23,17 @@ void Analysis_RemLog::Help() const {
   mprintf("\t{<remlog dataset> | <remlog filename>} [out <filename>] [crdidx | repidx]\n"
           "\t[stats [statsout <file>] [printtrips] [reptime <file>]] [lifetime <file>]\n"
           "\t[reptimeslope <n> reptimeslopeout <file>] [acceptout <file>] [name <setname>]\n"
+          "\t[edata [edataout <file>]]\n"
           "    crdidx: Print coordinate index vs exchange; output sets contain replica indices.\n"
           "    repidx: Print replica index vs exchange; output sets contain coordinate indices.\n"
-          "  Analyze previously read in replica log data.\n");
+          "  Analyze previously read in replica log data. The 'stats' keyword enables\n"
+          "  calculation of replica residence and round trip times. Overall exchange\n"
+          "  acceptance will be calculated and optionally written out to file specified\n"
+          "  by 'acceptout'. The 'reptimeslope' option can be used as a crude estimate of\n"
+          "  replica convergence by calculating the slope of coordinate residence at\n"
+          "  each replica vs number of exchanges; this should converge to 0. The 'edata'\n"
+          "  option can be used to extract replica energies from the logs into data sets\n"
+          "  named '<setname>[E]' for further analysis.\n");
 }
 
 // Analysis_RemLog::Setup()
@@ -94,6 +102,8 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, AnalysisSetup& se
   dsname_ = analyzeArgs.GetStringKey("name");
   if ((mode_ != NONE || calculateLifetimes_) && dsname_.empty())
     dsname_ = setup.DSL().GenerateDefaultName(def_name);
+  bool edata = analyzeArgs.hasKey("edata");
+  std::string edataout  = analyzeArgs.GetStringKey("edataout");
   // Set up an output set for each replica
   DataFile* dfout = 0;
   if (mode_ != NONE) {
@@ -106,7 +116,7 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, AnalysisSetup& se
     }
     MetaData md(dsname_);
     for (int i = 0; i < (int)remlog_->Size(); i++) {
-      md.SetIdx(i+1);
+      md.SetIdx(i+remlog_->Offset());
       DataSet_integer* ds = (DataSet_integer*)setup.DSL().AddSet(DataSet::INTEGER, md);
       if (ds == 0) return Analysis::ERR;
       outputDsets_.push_back( (DataSet*)ds );
@@ -114,7 +124,21 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, AnalysisSetup& se
       ds->Resize( remlog_->NumExchange() ); 
     }
   }
-  mprintf("   REMLOG: %s, %i replicas, %i exchanges\n", remlog_->legend(),
+  // Set up output energy data sets/file
+  if (edata) {
+    DataFile* eout = setup.DFL().AddDataFile( edataout, analyzeArgs );
+    MetaData md(dsname_, "E");
+    for (int i = 0; i < (int)remlog_->Size(); i++) {
+      md.SetIdx(i+remlog_->Offset());
+      DataSet* ds = setup.DSL().AddSet(DataSet::DOUBLE, md);
+      if (ds == 0) return Analysis::ERR;
+      eSets_.push_back( ds );
+      if (eout != 0) eout->AddDataSet( ds );
+      ds->Allocate( DataSet::SizeArray(1, remlog_->NumExchange()) );
+    }
+  }
+
+  mprintf("   REMLOG: %s, %zu replicas, %i exchanges\n", remlog_->legend(),
           remlog_->Size(), remlog_->NumExchange());
   if (mode_ == CRDIDX)
     mprintf("\tGetting coordinate index vs exchange.\n");
@@ -131,8 +155,14 @@ Analysis::RetType Analysis_RemLog::Setup(ArgList& analyzeArgs, AnalysisSetup& se
   if (calculateLifetimes_)
     mprintf("\tThe lifetime of each crd at each replica will be calculated.\n");
   if (acceptout_ != 0)
-    mprintf("\tOverall exchange acceptance % will be written to %s\n",
+    mprintf("\tOverall exchange acceptance %% will be written to %s\n",
             acceptout_->Filename().full());
+  if (!eSets_.empty()) {
+    mprintf("\tPotential energies from replica log will be saved to sets named '%s[E]'\n",
+            eSets_[0]->Meta().Name().c_str());
+    if (!edataout.empty())
+      mprintf("\tPotential energies will be written to '%s'\n", edataout.c_str());
+  }
 
   return Analysis::OK;
 }
@@ -144,7 +174,7 @@ Analysis::RetType Analysis_RemLog::Analyze() {
     return Analysis::ERR;
   }
   int Ndims = remlog_->DimTypes().Ndims();
-  mprintf("\t'%s' %i replicas, %i exchanges, %i dims.\n", remlog_->legend(),
+  mprintf("\t'%s' %zu replicas, %i exchanges, %i dims.\n", remlog_->legend(),
          remlog_->Size(), remlog_->NumExchange(), Ndims);
   // Set up arrays for tracking replica stats.
   std::vector<RepStats> DimStats;
@@ -161,10 +191,11 @@ Analysis::RetType Analysis_RemLog::Analyze() {
                                                    it != replicaFrac.end(); ++it)
       it->resize( remlog_->Size(), 0 );
   }
+  int offset = remlog_->Offset();
   // Variables for calculating replica lifetimes
   Analysis_Lifetime Lifetime;
   Array1D dsLifetime;
-  std::vector< std::vector<DataSet_integer> > series; // 2D - repidx, crdidx
+  std::vector< std::vector<DataSet_integer_mem> > series; // 2D - repidx, crdidx
   if (calculateLifetimes_) {
     mprintf("\tData size used for lifetime analysis= %zu bytes.\n",
             remlog_->Size() * remlog_->Size() * remlog_->NumExchange() * sizeof(int));
@@ -173,7 +204,7 @@ Analysis::RetType Analysis_RemLog::Analyze() {
       series[i].resize( remlog_->Size() );
       for (unsigned int j = 0; j < remlog_->Size(); j++) {
         series[i][j].Resize( remlog_->NumExchange() );
-        series[i][j].SetLegend("Rep"+integerToString(i+1)+",Crd"+integerToString(j+1));
+        series[i][j].SetLegend("Rep"+integerToString(i+offset)+",Crd"+integerToString(j+offset));
         dsLifetime.push_back( (DataSet_1D*)&(series[i][j]) );
       }
     }
@@ -188,18 +219,25 @@ Analysis::RetType Analysis_RemLog::Analyze() {
     mesh.CalculateMeshX( remlog_->Size(), 1, remlog_->Size() );
     repFracSlope_->Printf("%-8s", "#Exchg");
     for (int crdidx = 0; crdidx < (int)remlog_->Size(); crdidx++)
-      repFracSlope_->Printf("  C%07i_slope C%07i_corel", crdidx + 1, crdidx + 1);
+      repFracSlope_->Printf("  C%07i_slope C%07i_corel", crdidx + offset, crdidx + offset);
     repFracSlope_->Printf("\n");
   }
 
   ProgressBar progress( remlog_->NumExchange() );
+  // Loop over all exchanges
   for (int frame = 0; frame < remlog_->NumExchange(); frame++) {
     progress.Update( frame );
     for (int replica = 0; replica < (int)remlog_->Size(); replica++) {
       DataSet_RemLog::ReplicaFrame const& frm = remlog_->RepFrame( frame, replica );
-      int crdidx = frm.CoordsIdx() - 1;
-      int repidx = frm.ReplicaIdx() - 1;
+      // TODO: Dealing with offsets should probably be the responsibility of the DataIO object
+      int crdidx = frm.CoordsIdx() - offset;
+      int repidx = frm.ReplicaIdx() - offset;
       int dim = frm.Dim();
+      // Replica energy
+      if (!eSets_.empty()) {
+        double PE = frm.PE_X1();
+        eSets_[repidx]->Add( frame, &PE );
+      }
       // Exchange acceptance.
       // NOTE: Because currently the direction of the attempt is not always
       //       known unless the attempt succeeds for certain remlog types,
@@ -207,20 +245,20 @@ Analysis::RetType Analysis_RemLog::Analyze() {
       //       case the left partner is the right partner.
       if (replica == 0) DimStats[dim].attempts_++; // Assume same # attempts for every rep in dim
       if (frm.Success()) {
-        if (frm.PartnerIdx() - 1 == remlog_->ReplicaInfo()[replica][dim].RightID())
+        if (frm.PartnerIdx() - offset == remlog_->ReplicaInfo()[replica][dim].RightID())
           DimStats[dim].acceptUp_[replica]++;
         else // Assume down
           DimStats[dim].acceptDown_[replica]++;
       }
       if (mode_ == CRDIDX) {
         DataSet_integer& ds = static_cast<DataSet_integer&>( *(outputDsets_[repidx]) );
-        ds[frame] = frm.CoordsIdx();
+        ds.SetElement(frame, frm.CoordsIdx());
       } else if (mode_ == REPIDX) {
         DataSet_integer& ds = static_cast<DataSet_integer&>( *(outputDsets_[crdidx]) );
-        ds[frame] = frm.ReplicaIdx();
+        ds.SetElement(frame, frm.ReplicaIdx());
       }
       if (calculateLifetimes_)
-        series[repidx][crdidx][frame] = 1;
+        series[repidx][crdidx].SetElement(frame, 1);
       if (calculateStats_) {
         TripStats& trip = static_cast<TripStats&>( DimTrips[dim] );
         // Fraction spent at each replica
@@ -240,7 +278,7 @@ Analysis::RetType Analysis_RemLog::Analyze() {
             if (printIndividualTrips_)
               statsout_->Printf("[%i] CRDIDX %i took %i exchanges to travel"
                                " up and down (exch %i to %i)\n",
-                               replica, crdidx+1, rtrip, trip.bottom_[crdidx]+1, frame+1);
+                               replica, crdidx+offset, rtrip, trip.bottom_[crdidx]+1, frame+1);
             trip.roundTrip_[crdidx].AddElement( rtrip );
             trip.status_[crdidx] = HIT_BOTTOM;
             trip.bottom_[crdidx] = frame;
@@ -253,8 +291,8 @@ Analysis::RetType Analysis_RemLog::Analyze() {
       for (int crdidx = 0; crdidx < (int)remlog_->Size(); crdidx++) {
         for (int replica = 0; replica < (int)remlog_->Size(); replica++)
           mesh.SetY(replica, (double)replicaFrac[replica][crdidx] / (double)frame);
-        double slope, intercept, correl;
-        mesh.LinearRegression(slope, intercept, correl, 0);
+        double slope, intercept, correl, Fval;
+        mesh.LinearRegression(slope, intercept, correl, Fval, 0);
         repFracSlope_->Printf("  %14.7g %14.7g", slope * 100.0, correl);
                 //frame+1, crdidx, slope * 100.0, intercept * 100.0, correl
       }
@@ -265,20 +303,20 @@ Analysis::RetType Analysis_RemLog::Analyze() {
   for (int dim = 0; dim != Ndims; dim++) {
     // Assume number of exchange attempts is actually /2 since in Amber
     // attempts alternate up/down.
-    acceptout_->Printf("DIMENSION %i\n", dim+1);
+    acceptout_->Printf("# DIMENSION %i\n", dim+1);
     if (debug_ > 0) {
     for (int replica = 0; replica != (int)remlog_->Size(); replica++)
-      mprintf("Rep %i attempts %i up %i down %i\n", replica, DimStats[dim].attempts_, DimStats[dim].acceptUp_[replica], DimStats[dim].acceptDown_[replica]);
+      mprintf("Rep %i total attempts %i succ. up %i succ. down %i\n", replica, DimStats[dim].attempts_, DimStats[dim].acceptUp_[replica], DimStats[dim].acceptDown_[replica]);
     }
     acceptout_->Printf("%-8s %8s %8s\n", "#Replica", "%UP", "%DOWN");
     double exchangeAttempts = (double)DimStats[dim].attempts_ / 2.0;
     for (int replica = 0; replica != (int)remlog_->Size(); replica++)
-      acceptout_->Printf("%8i %8.3f %8.3f\n", replica+1,
+      acceptout_->Printf("%8i %8.3f %8.3f\n", replica+offset,
             ((double)DimStats[dim].acceptUp_[replica] / exchangeAttempts) * 100.0,
             ((double)DimStats[dim].acceptDown_[replica] / exchangeAttempts) * 100.0);
   }
   if (calculateStats_) {
-    statsout_->Printf("# %i replicas, %i exchanges.\n", remlog_->Size(), remlog_->NumExchange());
+    statsout_->Printf("# %zu replicas, %i exchanges.\n", remlog_->Size(), remlog_->NumExchange());
     for (int dim = 0; dim != Ndims; dim++) {
       if (Ndims > 1)
         statsout_->Printf("#Dim%i Round-trip stats:\n", dim+1);
@@ -286,23 +324,23 @@ Analysis::RetType Analysis_RemLog::Analyze() {
         statsout_->Printf("#Round-trip stats:\n");
       statsout_->Printf("#%-8s %8s %12s %12s %12s %12s\n", "CRDIDX", "RndTrips", 
                        "AvgExch.", "SD_Exch.", "Min", "Max");
-      unsigned int idx = 1;
+      unsigned int idx = offset;
       for (DSI_array::const_iterator rt = DimTrips[dim].roundTrip_.begin();
                                      rt != DimTrips[dim].roundTrip_.end(); ++rt)
       {
         double stdev = 0.0;
         double avg = rt->Avg( stdev );
-        statsout_->Printf("%-8u %8i %12.4f %12.4f %12.0f %12.0f\n", 
+        statsout_->Printf("%-8u %8zu %12.4f %12.4f %12.0f %12.0f\n", 
                           idx++, rt->Size(), avg, stdev, rt->Min(), rt->Max());
       }
     }
     reptime_->Printf("#Percent time spent at each replica:\n%-8s", "#Replica");
     for (int crd = 0; crd < (int)remlog_->Size(); crd++)
-      reptime_->Printf(" CRD_%04i", crd + 1);
+      reptime_->Printf(" CRD_%04i", crd + offset);
     reptime_->Printf("\n");
     double dframes = (double)remlog_->NumExchange();
     for (int replica = 0; replica < (int)remlog_->Size(); replica++) {
-      reptime_->Printf("%8i", replica+1);
+      reptime_->Printf("%8i", replica+offset);
       for (int crd = 0; crd < (int)remlog_->Size(); crd++)
         reptime_->Printf(" %8.3f", ((double)replicaFrac[replica][crd] / dframes) * 100.0);
       reptime_->Printf("\n");

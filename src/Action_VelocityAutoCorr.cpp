@@ -1,7 +1,6 @@
 #include "Action_VelocityAutoCorr.h"
 #include "CpptrajStdio.h"
 #include "ProgressBar.h"
-#include "DataSet_Mesh.h"
 #include "DataSet_double.h"
 #include "Constants.h"
 #include "Corr.h"
@@ -11,21 +10,39 @@
 
 // CONSTRUCTOR
 Action_VelocityAutoCorr::Action_VelocityAutoCorr() :
-  useVelInfo_(false), useFFT_(false), normalize_(false), VAC_(0), tstep_(0.0),
-  maxLag_(0) {}
+  diffout_(0),
+  VAC_(0),
+  diffConst_(0),
+  tstep_(0.0),
+  maxLag_(0),
+  useVelInfo_(false),
+  useFFT_(false),
+  normalize_(false)
+{}
 
 void Action_VelocityAutoCorr::Help() const {
-  mprintf("\t[<set name>] [<mask>] [usevelocity] [out <filename>]\n"
-          "\t[maxlag <time>] [tstep <timestep>] [direct] [norm]\n"
-          "  Calculate velocity auto-correlation function for atoms in <mask>\n");
+  mprintf("\t[<set name>] [<mask>] [usecoords] [out <filename>] [diffout <file>]\n"
+          "\t[maxlag <frames>] [tstep <timestep>] [direct] [norm]\n"
+          "  Calculate velocity auto-correlation function for atoms in <mask>. If\n"
+          "  'diffout' specified write calculated diffusion constants to <file>,\n"
+          "  otherwise they will be written to STDOUT.\n");
 }
 
 // Action_VelocityAutoCorr::Init()
 Action::RetType Action_VelocityAutoCorr::Init(ArgList& actionArgs, ActionInit& init, int debugIn)
 {
-  useVelInfo_ = actionArgs.hasKey("usevelocity");
-  mask_.SetMaskString( actionArgs.GetMaskNext() );
+  if (actionArgs.hasKey("usevelocity")) {
+    mprinterr("Error: The 'usevelocity' keyword is deprecated. Velocity information\n"
+              "Error:   is now used by default if present. To force cpptraj to use\n"
+              "Error:   coordinates to estimate velocities (not recommended) use the\n"
+              "Error:   'usecoords' keyword.\n");
+    return Action::ERR;
+  }
+  useVelInfo_ = !actionArgs.hasKey("usecoords");
+  if (mask_.SetMaskString( actionArgs.GetMaskNext() )) return Action::ERR;
   DataFile* outfile =  init.DFL().AddDataFile( actionArgs.GetStringKey("out"), actionArgs );
+  diffout_ = init.DFL().AddCpptrajFile( actionArgs.GetStringKey("diffout"),
+                                        "VAC diffusion constants", DataFileList::TEXT, true );
   maxLag_ = actionArgs.getKeyInt("maxlag", -1);
   tstep_ = actionArgs.getKeyDouble("tstep", 1.0);
   useFFT_ = !actionArgs.hasKey("direct");
@@ -33,6 +50,10 @@ Action::RetType Action_VelocityAutoCorr::Init(ArgList& actionArgs, ActionInit& i
   // Set up output data set
   VAC_ = init.DSL().AddSet(DataSet::DOUBLE, actionArgs.GetStringNext(), "VAC");
   if (VAC_ == 0) return Action::ERR;
+  // TODO: This should just be a scalar
+  diffConst_ = init.DSL().AddSet(DataSet::DOUBLE,
+                                 MetaData(VAC_->Meta().Name(), "D", MetaData::NOT_TS));
+  if (diffConst_ == 0) return Action::ERR;
   if (outfile != 0) outfile->AddDataSet( VAC_ );
 # ifdef MPI
   trajComm_ = init.TrajComm(); 
@@ -40,6 +61,7 @@ Action::RetType Action_VelocityAutoCorr::Init(ArgList& actionArgs, ActionInit& i
     mprintf("\nWarning: When calculating velocities between consecutive frames,\n"
             "\nWarning:   'velocityautocorr' in parallel will not work correctly if\n"
             "\nWarning:   coordinates have been modified by previous actions (e.g. 'rms').\n\n");
+  diffConst_->SetNeedsSync( false );
 # endif
   mprintf("    VELOCITYAUTOCORR:\n"
           "\tCalculate velocity auto-correlation function for atoms in mask '%s'\n",
@@ -47,15 +69,16 @@ Action::RetType Action_VelocityAutoCorr::Init(ArgList& actionArgs, ActionInit& i
   if (useVelInfo_)
     mprintf("\tUsing velocity information present in frames.\n");
   else
-    mprintf("\tCalculating velocities between consecutive frames.\n");
+    mprintf("\tCalculating velocities between consecutive frames from coordinates.\n");
   if (outfile != 0)
-    mprintf("\tOutput data set '%s' to '%s'\n", VAC_->legend(), 
+    mprintf("\tOutput velocity autocorrelation function '%s' to '%s'\n", VAC_->legend(), 
             outfile->DataFilename().full());
+  mprintf("\tWriting diffusion constants to '%s'\n", diffout_->Filename().full());
   if (maxLag_ < 1)
     mprintf("\tMaximum lag will be half total # of frames");
   else
     mprintf("\tMaximum lag is %i frames", maxLag_);
-  mprintf(", time step is %f ps\n", tstep_);
+  mprintf(", time step between frames is %f ps\n", tstep_);
   if (useFFT_)
     mprintf("\tUsing FFT to calculate autocorrelation function.\n");
   else
@@ -76,8 +99,7 @@ Action::RetType Action_VelocityAutoCorr::Setup(ActionSetup& setup) {
   }
   // If using velocity info, check that it is present.
   if (useVelInfo_ && !setup.CoordInfo().HasVel()) {
-    mprinterr("Error: 'usevelocity' specified but no velocity info assocated with %s\n",
-              setup.Top().c_str());
+    mprinterr("Error: No velocity info present in frames.\n");
     return Action::ERR;
   }
   // If we have already started recording velocities, check that the current 
@@ -108,23 +130,35 @@ Action::RetType Action_VelocityAutoCorr::DoAction(int frameNum, ActionFrame& frm
     previousFrame_ = frm.Frm();
   } else {
     // Use velocity information in the frame.
-    // FIXME: Eventually dont assume V is in Amber units.
+    // Assume V is in Amber units.
     VelArray::iterator vel = Vel_.begin();
     for (AtomMask::const_iterator atom = mask_.begin();
                                   atom != mask_.end(); 
                                 ++atom, ++vel)
-      vel->AddVxyz( Vec3(frm.Frm().VXYZ( *atom )) * Constants::AMBERTIME_TO_PS );
+      vel->AddVxyz( Vec3(frm.Frm().VelXYZ( *atom )) * Constants::AMBERTIME_TO_PS );
   }
   return Action::OK;
 }
 
 #ifdef MPI
+// Action_VelocityAutoCorr::ParallelPreviousFramesRequired()
+int Action_VelocityAutoCorr::ParallelPreviousFramesRequired() const {
+  if (useVelInfo_)
+    return 0;
+  else
+    return 1;
+}
+
+// Action_VelocityAutoCorr::ParallelPreloadFrames()
 int Action_VelocityAutoCorr::ParallelPreloadFrames(FArray const& preload_frames) {
-  unsigned int idx = preload_frames.size() - 1;
-  previousFrame_ = preload_frames[idx];
+  if (!useVelInfo_) {
+    unsigned int idx = preload_frames.size() - 1;
+    previousFrame_ = preload_frames[idx];
+  }
   return 0;
 }
 
+// Action_VelocityAutoCorr::SyncAction()
 int Action_VelocityAutoCorr::SyncAction() {
   if (Vel_.empty()) return 0;
   // Get total number of frames. Assume same # vectors in each thread.
@@ -146,12 +180,12 @@ int Action_VelocityAutoCorr::SyncAction() {
 void Action_VelocityAutoCorr::Print() {
   if (Vel_.empty()) return;
   mprintf("    VELOCITYAUTOCORR:\n");
-  mprintf("\t%zu vectors have been saved, total length of each = %zu\n",
+  mprintf("\t%zu vectors have been saved, total length of each = %zu frames.\n",
           Vel_.size(), Vel_[0].Size());
   int maxlag;
   if (maxLag_ <= 0) {
     maxlag = (int)Vel_[0].Size() / 2;
-    mprintf("\tSetting maximum lag to 1/2 total time (%i)\n", maxlag);
+    mprintf("\tSetting maximum lag to 1/2 total frames (%i)\n", maxlag);
   } else if (maxLag_ > (int)Vel_[0].Size()) {
     maxlag = (int)Vel_[0].Size();
     mprintf("\tSpecified maximum lag > total length, setting to %i\n", maxlag);
@@ -199,7 +233,8 @@ void Action_VelocityAutoCorr::Print() {
     // transformed array after FFT, every 3rd value will be the correlation
     // via dot products that we want (once it is normalized).
     unsigned int total_length = Vel_[0].Size() * 3;
-    CorrF_FFT pubfft( total_length );
+    CorrF_FFT pubfft;
+    pubfft.CorrSetup( total_length );
     ComplexArray data1 = pubfft.Array();
     //mprintf("Complex Array Size is %i (%i actual)\n", data1.size(), data1.size()*2);
     ProgressBar progress( Vel_.size() );
@@ -243,15 +278,24 @@ void Action_VelocityAutoCorr::Print() {
       //Ct[t] /= (double)Vel_.size();
   }
   // Integration to get diffusion coefficient.
-  VAC_->SetDim(Dimension::X, Dimension(1.0, tstep_, "Frame"));
+  VAC_->SetDim(Dimension::X, Dimension(0.0, tstep_, "Time (ps)"));
   mprintf("\tIntegrating data set %s, step is %f\n", VAC_->legend(), VAC_->Dim(0).Step());
-  DataSet_Mesh mesh;
-  mesh.SetMeshXY( static_cast<DataSet_1D const&>(*VAC_) );
-  double total = mesh.Integrate_Trapezoid();
-  const double ANG2_PS_TO_CM2_S = 10.0 / 6.0;
-  mprintf("\t3D= %g Å^2/ps, %g x10^-5 cm^2/s\n", total, total * ANG2_PS_TO_CM2_S);
-  mprintf("\t D= %g Å^2/ps, %g x10^-5 cm^2/s\n", total / 3.0, total * ANG2_PS_TO_CM2_S / 3.0);
-  mprintf("\t6D= %g Å^2/ps, %g x10^-5 cm^2/s\n", total * 2.0, total * ANG2_PS_TO_CM2_S * 2.0);
+  double total = Ct.Integrate( DataSet_1D::TRAPEZOID );
+  const double ANG2_PS_TO_CM2_S = 10.0; // Convert Ang^2/ps to 1E-5 cm^2/s
+  const char* tab = "\t";
+  if (!diffout_->IsStream()) {
+    mprintf("\tDiffusion constants output to '%s'\n", diffout_->Filename().full());
+    diffout_->Printf("# Diffusion constants from VAC for atoms in '%s'\n", mask_.MaskString());
+    tab = "";
+  } 
+  diffout_->Printf("%s3D= %g Ang.^2/ps, %g x10^-5 cm^2/s\n", tab, total,
+                   total * ANG2_PS_TO_CM2_S);
+  double diffusionConst = total * ANG2_PS_TO_CM2_S / 3.0;
+  diffout_->Printf("%s D= %g Ang.^2/ps, %g x10^-5 cm^2/s\n", tab, total/3.0,
+                   diffusionConst);
+  diffConst_->Add(0, &diffusionConst);
+  diffout_->Printf("%s6D= %g Ang.^2/ps, %g x10^-5 cm^2/s\n", tab, total*2.0,
+                   total * ANG2_PS_TO_CM2_S * 2.0);
   if (normalize_) {
     // Normalize VAC fn to 1.0
     mprintf("\tNormalizing VAC function to 1.0, C[0]= %g\n", Ct[0]);

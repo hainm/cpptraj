@@ -4,9 +4,10 @@
 
 CleanFiles ptraj.in out.dipole out.xplor out.dx out.dx.2 test.dx box.dx mask.dx \
            nonortho.dx triclinic.nc nonortho.pdb bounds.dat bounds.mol2 \
-           bounds.xplor avg.mol2 nonortho_wrap.dx
+           bounds.xplor avg.mol2 nonortho_wrap.dx byres.dx bymol.dx
 
-CheckNetcdf
+TESTNAME='Grid tests'
+Requires netcdf maxthreads 10
 INPUT="ptraj.in"
 
 # dipole
@@ -20,7 +21,6 @@ dipole out.dipole 20 0.5 20 0.5 20 0.5 :WAT
 EOF
   RunCpptraj "Dipole test"
   DoTest out.dipole.save out.dipole
-  CheckTest
 }
 
 # grid
@@ -33,11 +33,14 @@ rms first :1-13
 average avg.mol2 :1-13 
 grid out.xplor 20 0.5 20 0.5 20 0.5 :WAT@O name XPLOR
 grid out.dx 20 0.5 20 0.5 20 0.5 :WAT@O
+grid out byres.dx 10 1 10 1 10 1 :WAT byres
+grid out bymol.dx 10 1 10 1 10 1 :WAT bymol
 EOF
   RunCpptraj "Grid test"
   DoTest out.xplor.save out.xplor
   DoTest out.dx.save out.dx
-  CheckTest
+  DoTest byres.dx.save byres.dx
+  DoTest byres.dx.save bymol.dx
 }
 
 # grid dx read
@@ -52,7 +55,6 @@ grid out.dx.2 data out.dx.save @CA opendx
 EOF
   RunCpptraj "OpenDX Grid read test"
   DoTest out.dx.2.save out.dx.2
-  CheckTest
 }
 
 # Specified center

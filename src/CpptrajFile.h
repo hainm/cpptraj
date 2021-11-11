@@ -10,7 +10,7 @@ class CpptrajFile {
   public:
     enum AccessType   { READ=0, WRITE, APPEND, UPDATE };
     enum CompressType { NO_COMPRESSION=0, GZIP, BZIP2, ZIP };
-    enum FileType { UNKNOWN_TYPE=0, STANDARD, GZIPFILE, BZIP2FILE, ZIPFILE, MPIFILE };
+    enum FileType { UNKNOWN_TYPE=0, STANDARD, GZIPFILE, BZIP2FILE, ZIPFILE, MPIFILE, MPISHARED };
 
     CpptrajFile();
     virtual ~CpptrajFile(); // Virtual since class is inherited
@@ -51,8 +51,15 @@ class CpptrajFile {
     int SetupAppend(FileName const&, int);
     // -------------------------------------------
 #   ifdef MPI
-    int ParallelOpenFile(AccessType, Parallel::Comm const&);
+    bool IsMPI() const { return (fileType_ == MPIFILE || fileType_ == MPISHARED); }
+    int ParallelOpenFile(AccessType, Parallel::Comm const&, bool);
+    int ParallelOpenFile(AccessType t, Parallel::Comm const& c) {
+      return ParallelOpenFile(t, c, false); //  Default to no shared write
+    }
     int ParallelOpenFile(Parallel::Comm const& c) { return ParallelOpenFile(access_, c); }
+    int ParallelOpenFile(Parallel::Comm const& c, bool b) {
+      return ParallelOpenFile(access_, c, b);
+    }
     // -------------------------------------------
 #   endif
     /// \return the access file is currently set up for.
@@ -82,6 +89,7 @@ class CpptrajFile {
     off_t Tell()                           { return IO_->Tell();          }
     static const size_t BUF_SIZE = 1024;
   protected: // Protected for PDBfile/Mol2File
+    int Debug() const { return debug_; }
     char linebuffer_[BUF_SIZE]; ///< Used in Printf/GetLine functions
   private:
     static const char* FileTypeName[];

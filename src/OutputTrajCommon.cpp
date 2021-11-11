@@ -1,6 +1,9 @@
 #include "OutputTrajCommon.h"
+#include "TrajectoryIO.h"
+#include "Topology.h"
 #include "CpptrajStdio.h"
 #include "StringRoutines.h" // fileExists
+#include "ArgList.h"
 
 // CONSTRUCTOR
 OutputTrajCommon::OutputTrajCommon() :
@@ -37,12 +40,12 @@ int OutputTrajCommon::CommonTrajoutSetup(FileName const& tnameIn, ArgList& argIn
   // If a write format was not specified (UNKNOWN_TRAJ) check the argument
   // list to see if format was specified there.
   writeFormat_ = fmtIn;
-  if (writeFormat_==TrajectoryFile::UNKNOWN_TRAJ) {
-    writeFormat_ = TrajectoryFile::GetFormatFromArg(argIn);
+  if (writeFormat_ == TrajectoryFile::UNKNOWN_TRAJ) {
+    writeFormat_ = TrajectoryFile::WriteFormatFromArg(argIn, TrajectoryFile::UNKNOWN_TRAJ);
     // If still UNKNOWN_TRAJ this means no type specified. Check to see if
     // the filename extension is recognized.
     if (writeFormat_ == TrajectoryFile::UNKNOWN_TRAJ) {
-      writeFormat_ = TrajectoryFile::GetTypeFromExtension( trajName_.Ext() );
+      writeFormat_ = TrajectoryFile::WriteFormatFromFname(trajName_, TrajectoryFile::UNKNOWN_TRAJ);
       // Default to Amber trajectory.
       if (writeFormat_ == TrajectoryFile::UNKNOWN_TRAJ) {
         mprintf("Warning: Format not specified and extension '%s' not recognized."
@@ -113,13 +116,13 @@ int OutputTrajCommon::SetupCoordInfo(Topology* tparmIn, int nFrames, CoordinateI
   if (noFrc_ ) cInfo_.SetForce( false );
   if (noReps_) cInfo_.SetReplicaDims( ReplicaDimArray() );
   // Determine how many frames will be written
-  NframesToWrite_ = nFrames;
-  if (hasRange_)
-    NframesToWrite_ = FrameRange_.Size();
-  //trajIsOpen_ = true;
   // If a framerange is defined set it to the beginning of the range
-  if (hasRange_)
+  if (hasRange_) {
+    NframesToWrite_ = FrameRange_.Size();
     rangeframe_ = FrameRange_.begin();
+  } else
+    NframesToWrite_ = nFrames;
+  //trajIsOpen_ = true;
   numFramesWritten_ = 0;
   return 0;
 }
@@ -134,6 +137,8 @@ void OutputTrajCommon::CommonInfo() const {
   if (noReps_) mprintf(" no replica dimensions,");
   if (hasRange_)
     FrameRange_.PrintRange(": Writing frames", 1);
+  else if (!frameCount_.DefaultSettings())
+    frameCount_.FrameCounterBrief();
   else if (NframesToWrite_ > 0) {
     mprintf(": Writing %i frames", NframesToWrite_);
     frameCount_.FrameCounterBrief();

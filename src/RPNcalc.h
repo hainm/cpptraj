@@ -1,12 +1,18 @@
 #ifndef INC_RPNCALC_H
 #define INC_RPNCALC_H
-#include "DataSetList.h"
+#include <vector>
+#include "TextFormat.h"
+class DataSetList;
+class DataSet;
+class ArgList;
 /// Reverse Polish notation calculator
 class RPNcalc {
   public:
     typedef std::vector<double> Darray;
     RPNcalc();
     void SetDebug(int d) { debug_ = d; }
+    /// Set options
+    int ProcessOptions(ArgList&);
     /// Set RPNcalc with equation from expression.
     int ProcessExpression(std::string const&);
     /// Evaluate equation; variables = DataSets
@@ -19,7 +25,7 @@ class RPNcalc {
     /// \return Name of variable being assigned to.
     std::string const& FirstTokenName() const;
     /// \return Number of A<n> parameter variables, check validity.
-    int Nparams() const;
+    int Nparams(AssignType) const;
   private:
     class Token;
     class ValType;
@@ -47,12 +53,26 @@ class RPNcalc {
       int resultIsScalar_;
       const char* description_;
     };
+    /// Hold info for recognizing functions
+    struct FnIdType {
+      TokenType fnType_;   ///< Function token type
+      int nChar_;          ///< Number of characters in function name including left parentheses
+      const char* fnName_; ///< Function name including left parentheses
+    };
+    typedef const FnIdType* FnIdPtr;
+    /// Array containing info for recognizing functions
+    static const FnIdType FnIdArray_[];
+    /// Identify function in given expression at given position
+    static FnIdPtr IdFunction(std::string const&, size_t);
 
     static inline double DoOperation(double, double, TokenType);
+    int TokenLoop(DataSetList& DSL) const;
 
     typedef std::vector<Token> Tarray;
     Tarray tokens_;
     int debug_;
+    TextFormat fmt_; ///< Output format
+    bool formatSet_; ///< If true use output format for any output data sets
 };
 /// Hold values/operators for RPN calculator.
 class RPNcalc::Token {

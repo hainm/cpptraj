@@ -14,7 +14,7 @@ Action::RetType Action_CheckChirality::Init(ArgList& actionArgs, ActionInit& ini
   // Get keywords
   DataFile* outfile = init.DFL().AddDataFile( actionArgs.GetStringKey("out"), actionArgs );
   // Get Masks
-  Mask1_.SetMaskString( actionArgs.GetMaskNext() );
+  if (Mask1_.SetMaskString( actionArgs.GetMaskNext() )) return Action::ERR;
   // Set up DataSets
   setname_ = actionArgs.GetStringNext();
   if (setname_.empty())
@@ -148,8 +148,8 @@ Action::RetType Action_CheckChirality::DoAction(int frameNum, ActionFrame& frm) 
 int Action_CheckChirality::SyncAction() {
   int total_L, total_D;
   for (Rarray::iterator ri = resInfo_.begin(); ri != resInfo_.end(); ++ri) {
-    Init_.TrajComm().Reduce( &total_L, &(ri->N_L_), 1, MPI_INT, MPI_SUM );
-    Init_.TrajComm().Reduce( &total_D, &(ri->N_D_), 1, MPI_INT, MPI_SUM );
+    Init_.TrajComm().ReduceMaster( &total_L, &(ri->N_L_), 1, MPI_INT, MPI_SUM );
+    Init_.TrajComm().ReduceMaster( &total_D, &(ri->N_D_), 1, MPI_INT, MPI_SUM );
     if (Init_.TrajComm().Master()) {
       ri->N_L_ = total_L;
       ri->N_D_ = total_D;

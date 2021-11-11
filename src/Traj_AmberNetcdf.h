@@ -3,6 +3,7 @@
 #ifdef BINTRAJ
 #include "TrajectoryIO.h"
 #include "NetcdfFile.h"
+#include "FileName.h"
 /// Reads and writes Amber Netcdf format trajectories. 
 class Traj_AmberNetcdf : public TrajectoryIO, private NetcdfFile {
   public:
@@ -22,11 +23,8 @@ class Traj_AmberNetcdf : public TrajectoryIO, private NetcdfFile {
     int readForce(int, Frame&);
     int writeFrame(int,Frame const&);
     void Info();
-    int processWriteArgs(ArgList&);
+    int processWriteArgs(ArgList&, DataSetList const&);
     int processReadArgs(ArgList&);
-    // Reservoir functions
-    inline int createReservoir(bool,double,int);
-    int writeReservoir(int, Frame const&, double, int);
 #   ifdef MPI
     // Parallel functions
     int parallelOpenTrajin(Parallel::Comm const&);
@@ -38,21 +36,15 @@ class Traj_AmberNetcdf : public TrajectoryIO, private NetcdfFile {
     void parallelCloseTraj();
 #   endif
   private:
-    float *Coord_;
-    FileName filename_;
-    int eptotVID_;
-    int binsVID_;
-    bool useVelAsCoords_;
-    bool useFrcAsCoords_;
-    bool readAccess_;
-    bool outputTemp_;
-    bool write_mdcrd_;
-    bool write_mdvel_;
-    bool write_mdfrc_;
+    float *Coord_;        ///< Temporary array for converting double <-> single precision
+    FileName filename_;   ///< File name
+    bool useVelAsCoords_; ///< If true read velocities in place of coordinates
+    bool useFrcAsCoords_; ///< If true read forces in place of coordinates
+    bool readAccess_;     ///< True if set up for read, false otherwise
+    bool outputTemp_;     ///< If true write out temperatures
+    bool write_mdcrd_;    ///< If true write out coordinates
+    bool write_mdvel_;    ///< If true write out velocities
+    bool write_mdfrc_;    ///< If true write out forces
 };
-// ----- INLINE FUNCTIONS ------------------------------------------------------
-int Traj_AmberNetcdf::createReservoir(bool hasBins, double reservoirT, int iseed) {
-  return NC_createReservoir(hasBins, reservoirT, iseed, eptotVID_, binsVID_);
-}
 #endif
 #endif

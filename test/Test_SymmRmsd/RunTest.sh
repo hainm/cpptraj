@@ -3,18 +3,15 @@
 . ../MasterTest.sh
 
 CleanFiles rms.in rmsd?.dat rmsd.dat rotate.in srms.in *.rmsd.dat \
-           TYR.remap.crd ASP.remap.crd GLU.remap.crd
-CheckNetcdf
-MaxThreads 3 "Symmetry-corrected RMSD tests"
-if [[ $? -ne 0 ]] ; then
-  EndTest
-  exit 0
-fi
+           TYR.remap.crd ASP.remap.crd GLU.remap.crd afv.rmsd.dat
+
+TESTNAME='Symmetry-corrected RMSD tests'
+Requires maxthreads 3
 
 Rotate() {
   INPUT="-i rotate.in"
   cat > rotate.in <<EOF
-parm AFV.parm7
+parm ../AFV.parm7
 trajin AFV.rst7
 makestructure chi2:2:CA:CB:CG:CD1:0
 #trajout AFV.rotate2.rst7
@@ -28,7 +25,7 @@ EOF
 Rms() {
   INPUT="-i rms.in"
   cat > rms.in <<EOF
-parm AFV.parm7
+parm ../AFV.parm7
 reference AFV.rst7
 trajin AFV.rotate2.rst7
 trajin AFV.rotate3.rst7 
@@ -41,27 +38,44 @@ EOF
 }
 
 STest() {
-  INPUT="-i srms.in"
-  cat > srms.in <<EOF
+  UNITNAME="$1 symmetry-corrected RMSD test"
+  CheckFor netcdf maxthreads 2
+  if [ $? -eq 0 ] ; then
+    INPUT="-i srms.in"
+    cat > srms.in <<EOF
 parm $1.parm7
 trajin $1.nc
 rms first out $1.rmsd.dat NOSYMM
 symmrmsd first out $1.rmsd.dat SYMM remap
 trajout $1.remap.crd
 EOF
-  RunCpptraj "$1 symmetry-corrected rmsd test."
-  DoTest $1.rmsd.dat.save $1.rmsd.dat
-  DoTest $1.remap.crd.save $1.remap.crd
+    RunCpptraj "$UNITNAME"
+    DoTest $1.rmsd.dat.save $1.rmsd.dat
+    DoTest $1.remap.crd.save $1.remap.crd
+  fi
+}
+
+LongerTest() {
+  UNITNAME='Longer symmetry-corrected RMSD test'
+  CheckFor netcdf
+  if [ $? -eq 0 ] ; then
+    INPUT='-i srms.in'
+    cat > srms.in <<EOF
+parm ../AFV.parm7
+trajin ../AFV.nc
+symmrmsd AFV !@H= out afv.rmsd.dat
+EOF
+    RunCpptraj "$UNITNAME."
+    DoTest afv.rmsd.dat.save afv.rmsd.dat
+  fi
 }
 
 #Rotate
 Rms
-MaxThreads 2 "ASP and GLU symmetry tests"
-if [[ $? -eq 0 ]] ; then
-  STest ASP
-  STest GLU
-fi
+STest ASP
+STest GLU
 STest TYR
+LongerTest
 
 EndTest
 exit 0
