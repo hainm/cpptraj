@@ -138,6 +138,7 @@ int Cpptraj::Cluster::MetricArray::setupPairwiseCache(ArgList& analyzeArgs,
     }
   }*/
 
+  pw_mismatch_fatal_ = !analyzeArgs.hasKey("pwrecalc");
   cache_ = 0;
   if (load_pair ||
       (!save_pair && !pairdistname.empty()))
@@ -170,7 +171,7 @@ int Cpptraj::Cluster::MetricArray::setupPairwiseCache(ArgList& analyzeArgs,
         return 1;
       }
       cache_ = (DataSet_PairwiseCache*)ds;
-      if (cache_ != 0 && save_pair) {
+      if (cache_ != 0 && save_pair && pw_mismatch_fatal_) {
         mprintf("Warning: 'savepairdist' specified but pairwise cache loaded from file.\n"
                 "Warning: Disabling 'savepairdist'.\n");
         save_pair = false;
@@ -245,11 +246,15 @@ int Cpptraj::Cluster::MetricArray::setupPairwiseCache(ArgList& analyzeArgs,
     if (cache_ == 0) {
       mprintf("Warning: Not caching distances; ignoring 'savepairdist'\n");
     } else {
-      if (pairdistname.empty())
+      if (pairdistname.empty()) {
+        // Use default name and type
         pairdistname = DEFAULT_PAIRDIST_NAME_;
-      if (pairdisttype == DataFile::UNKNOWN_DATA)
         pairdisttype = DEFAULT_PAIRDIST_TYPE_;
-      // TODO enable saving for other set types?
+      } else {
+        // pairwise distance name specified. See if the extension is recognized. 
+        if (pairdisttype == DataFile::UNKNOWN_DATA)
+          pairdisttype = DataFile::WriteFormatFromFname( pairdistname, DEFAULT_PAIRDIST_TYPE_ );
+      }
       if (cache_->Type() == DataSet::PMATRIX_MEM) {
         DataFile* pwd_file = DFL.AddDataFile( pairdistname, pairdisttype, ArgList() );
         if (pwd_file == 0) return 1;
@@ -260,7 +265,6 @@ int Cpptraj::Cluster::MetricArray::setupPairwiseCache(ArgList& analyzeArgs,
       }
     }
   }
-  pw_mismatch_fatal_ = !analyzeArgs.hasKey("pwrecalc");
 
   return 0;
 }
@@ -485,11 +489,13 @@ void Cpptraj::Cluster::MetricArray::Info() const {
 void Cpptraj::Cluster::MetricArray::NewCentroid(CentroidArray& centroids, Cframes const& framesIn)
 const
 {
+  //mprintf("DEBUG: Calling MetricArray::NewCentroid for %zu frames.\n", framesIn.size());
   centroids.Clear();
   for (std::vector<Metric*>::const_iterator it = metrics_.begin(); it != metrics_.end(); ++it)
   {
     centroids.push_back( (*it)->NewCentroid( framesIn ) );
   }
+  //mprintf("DEBUG: There are %zu centroids for %zu metrics.\n", centroids.size(), metrics_.size());
 }
 
 /** Calculate centroids in given list. */
@@ -497,7 +503,7 @@ void Cpptraj::Cluster::MetricArray::CalculateCentroid(CentroidArray& centroids, 
 const
 {
   if (centroids.size() != metrics_.size()) {
-    mprinterr("Internal Error: MetricArray::CalculateCentroid: centroids and metrics_ sizes do not match.\n");
+    mprinterr("Internal Error: MetricArray::CalculateCentroid: centroids (%u) and metrics_ (%zu) sizes do not match.\n", centroids.size(), metrics_.size());
     return;
   }
   for (unsigned int idx = 0; idx != metrics_.size(); idx++)
@@ -510,7 +516,7 @@ void Cpptraj::Cluster::MetricArray::FrameOpCentroid(int f1, CentroidArray& centr
 const
 {
   if (centroids.size() != metrics_.size()) {
-    mprinterr("Internal Error: MetricArray::FrameOpCentroid: centroids and metrics_ sizes do not match.\n");
+    mprinterr("Internal Error: MetricArray::FrameOpCentroid: centroids (%u) and metrics_ (%zu) sizes do not match.\n", centroids.size(), metrics_.size());
     return;
   }
   for (unsigned int idx = 0; idx != metrics_.size(); idx++)
@@ -549,7 +555,7 @@ double Cpptraj::Cluster::MetricArray::DistCalc(std::vector<double> const& arrayI
 double Cpptraj::Cluster::MetricArray::FrameCentroidDist(int frame, CentroidArray const& centroids )
 {
   if (centroids.size() != metrics_.size()) {
-    mprinterr("Internal Error: MetricArray::FrameCentroidDist: centroids and metrics_ sizes do not match.\n");
+    mprinterr("Internal Error: MetricArray::FrameCentroidDist: centroids (%u) and metrics_ (%zu) sizes do not match.\n", centroids.size(), metrics_.size());
     return -1.0;
   }
   for (unsigned int idx = 0; idx != metrics_.size(); idx++)
@@ -561,7 +567,7 @@ double Cpptraj::Cluster::MetricArray::FrameCentroidDist(int frame, CentroidArray
 double Cpptraj::Cluster::MetricArray::CentroidDist(CentroidArray const& C1, CentroidArray const& C2)
 {
   if (C1.size() != metrics_.size() || C2.size() != metrics_.size()) {
-    mprinterr("Internal Error: MetricArray::CentroidDist: centroids and metrics_ sizes do not match.\n");
+    mprinterr("Internal Error: MetricArray::CentroidDist: centroids (%u, %u) and metrics_ (%zu) sizes do not match.\n", C1.size(), C2.size(), metrics_.size());
     return -1.0;
   }
   for (unsigned int idx = 0; idx != metrics_.size(); idx++)
@@ -715,10 +721,12 @@ int Cpptraj::Cluster::MetricArray::CacheDistances(Cframes const& framesToCache, 
     // The frames to cache must match cached frames.
     if (!cache_->CachedFramesMatch( framesToCache )) {
       if (pw_mismatch_fatal_) {
-        mprinterr("Error: Frames to cache do not match those in existing cache.\n");
+        mprinterr("Error: Frames to cluster do not match those in existing cache.\n"
+                  "Error: To force recalculation specify 'pwrecalc' (and\n"
+                  "Error:  'savepairdist' if the old matrix should be overwritten).\n");
         return 1;
       } else {
-        mprintf("Warning: Frames to cache do not match those in existing cache.\n"
+        mprintf("Warning: Frames to cluster do not match those in existing cache.\n"
                 "Warning: Re-calculating pairwise cache.\n");
         do_cache = true;
       }

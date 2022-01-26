@@ -17014,7 +17014,8 @@ Options for XYZ format:
 \end_layout
 
 \begin_layout LyX-Code
-ftype {atomxyz|xyz} titletype {none|single|perframe} width <#> prec <#>
+[ftype {namexyz|atomxyz|xyz}] [titletype {none|single|perframe}] [width
+ <#>] [prec <#>]
 \end_layout
 
 \begin_deeper
@@ -17023,7 +17024,16 @@ ftype
 \begin_inset space ~
 \end_inset
 
-{atomxyz|xyz} Choose either 'ATOM X Y Z' (default) or 'X Y Z' output format.
+{atomxyz|xyz} Choose either 'NAME X Y Z' (default), 'ATOM X Y Z', or 'X
+ Y Z' output format.
+ 
+\series bold
+'namexyz'
+\series default
+ format is the standard XYZ format, where each frame is preceded by the
+ number of atoms and a comment.
+ The comment written by CPPTRAJ will include the set number and box information
+ (if present).
 \end_layout
 
 \begin_layout Description
@@ -17033,6 +17043,11 @@ titletype
 
 {none|single|perframe} No title, one title (default), or title before every
  frame.
+ Only applies if not 
+\series bold
+'namexyz'
+\series default
+.
 \end_layout
 
 \begin_layout Description
@@ -40286,6 +40301,10 @@ cluster
 \end_layout
 
 \begin_layout LyX-Code
+    [useframesincache]
+\end_layout
+
+\begin_layout LyX-Code
   Algorithm Args: [{hieragglo|dbscan|kmeans|dpeaks}]
 \end_layout
 
@@ -40374,11 +40393,11 @@ cluster
 \end_layout
 
 \begin_layout LyX-Code
-	[clustersvtime <file> [cvtwindow <#>]] [sil <prefix>] [metricstats <file>]
+	[clustersvtime <file> [cvtwindow <#>]] [sil <prefix> [silidx {idx|frm}]]
 \end_layout
 
 \begin_layout LyX-Code
-	[cpopvtime <file> [{normpop|normframe}]] [lifetime]
+	[metricstats <file>] [cpopvtime <file> [{normpop|normframe}]] [lifetime]
 \end_layout
 
 \begin_layout LyX-Code
@@ -40489,6 +40508,11 @@ cnvtset
 \end_layout
 
 \end_deeper
+\begin_layout Description
+[useframesincache] If a pairwise cache is specified, cluster on the frames
+ stored in the cache.
+\end_layout
+
 \begin_layout Standard
 Algorithms:
 \end_layout
@@ -41363,6 +41387,25 @@ uster.dat' and cluster silhouette value for each individual frame to '<prefix>.f
 me.dat'.
 \end_layout
 
+\begin_deeper
+\begin_layout Description
+[silidx
+\begin_inset space ~
+\end_inset
+
+{idx|frm}] Choose what indices to write to the cluster silhouette frame
+ file: 
+\series bold
+idx
+\series default
+ (the default) specifies the sorted index (starting from 0), 
+\series bold
+frm
+\series default
+ specifies the actual frame number.
+\end_layout
+
+\end_deeper
 \begin_layout Description
 [metricstats
 \begin_inset space ~
@@ -41776,7 +41819,13 @@ The cluster silhouette is a measure of how well each point fits within a
  Values of -1 indicate the point is dissimilar and may fit better in a neighbori
 ng cluster.
  Values of 0 indicate the point is on a border between two clusters.
- 
+ The file containing the cluster silhouette value for each frame can be
+ viewed directly with the XMGRACE plotting program using the default (sorted
+ by silhouette value) index ('
+\series bold
+silidx idx
+\series default
+').
 \end_layout
 
 \begin_layout Subsubsection*
