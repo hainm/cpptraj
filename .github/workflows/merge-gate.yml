@@ -14,25 +14,8 @@ jobs:
       matrix:
         compiler: ["gnu", "clang"]
         use_cmake: ["0", "1"]
-        use_openmp: ["no"]
-        use_mpi: ["no"]
-        include:
-          - use_openmp: "yes"
-            compiler: "gnu"
-            use_mpi: "no"
-            use_cmake: "0"
-          - use_openmp: "no"
-            compiler: "gnu"
-            use_mpi: "yes"
-            use_cmake: "0"
-          - use_openmp: "yes"
-            compiler: "gnu"
-            use_mpi: "yes"
-            use_cmake: "0"
-          - use_openmp: "no"
-            compiler: "gnu"
-            use_mpi: "yes"
-            use_cmake: "1"
+        use_openmp: ["no", "yes"]
+        use_mpi: ["no", "yes"]
 
     env:
       COMPILER: ${{ matrix.compiler }}
@@ -45,12 +28,7 @@ jobs:
     steps:
       - name: Install prerequisite packages
         run: |
-          sudo apt-get install gfortran
-          sudo apt-get install libbz2-dev
-          sudo apt-get install libblas-dev liblapack-dev
-          sudo apt-get install libfftw3-dev
-          sudo apt-get install clang
-          sudo apt-get install cmake-data cmake
+          sudo apt-get install -y gfortran libbz2-dev libblas-dev liblapack-dev libfftw3-dev clang cmake
 
       - name: Checkout source code
         uses: actions/checkout@v4
@@ -66,11 +44,7 @@ jobs:
           if [ $USE_OPENMP = "yes" ]; then
             export OPT="openmp"
             export OMP_NUM_THREADS=4
-            if [ "$USE_CMAKE" = "1" ]; then
-              export BUILD_FLAGS="-DOPENMP=TRUE"
-            else
-              export BUILD_FLAGS="-openmp"
-            fi
+            export BUILD_FLAGS="${BUILD_FLAGS} -DOPENMP=TRUE"
           fi
 
           if [ $USE_MPI = "yes" ]; then
@@ -85,14 +59,8 @@ jobs:
             export PATH=$HOME/bin:$PATH
             export LD_LIBRARY_PATH=$HOME/lib:$LD_LIBRARY_PATH
             export DO_PARALLEL="mpirun -n 2"
-            if [ $USE_OPENMP = "yes" ]; then
-              export OMP_NUM_THREADS=1
-            fi
-            if [ "$USE_CMAKE" = "1" ]; then
-              export BUILD_FLAGS="-DMPI=TRUE ${BUILD_FLAGS}"
-            else
-              export BUILD_FLAGS="-mpi ${BUILD_FLAGS}"
-            fi
+            export OMP_NUM_THREADS=1
+            export BUILD_FLAGS="${BUILD_FLAGS} -DMPI=TRUE"
           fi
 
           if [ "$USE_CMAKE" = "1" ]; then
@@ -129,44 +97,37 @@ jobs:
     strategy:
       max-parallel: 5
     steps:
-    - name: Install prerequisite packages
-      run: |
-        sudo apt-get install gfortran
-        sudo apt-get install libbz2-dev
-        sudo apt-get install libblas-dev liblapack-dev
-        sudo apt-get install libfftw3-dev
-        sudo apt-get install clang
-        sudo apt-get install cmake-data cmake    
-    - uses: actions/checkout@v4
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-    - name: Add conda to system path
-      run: |
-        # $CONDA is an environment variable pointing to the root of the miniconda directory
-        echo $CONDA/bin >> $GITHUB_PATH
-    - name: Install conda packages
-      run: |
-        which conda
-        conda install conda=23.11.0 python=3.10
-        conda --version
-        conda env update --file devtools/ci/environment.yml --name base
-    - name: Install cpptraj
-      run: |
-        export PATH=$HOME/bin:${PATH}
-        export LD_LIBRARY_PATH=$HOME/lib:${LD_LIBRARY_PATH}
-        export MAKE_COMMAND="make -j2"
-        ./configure --buildlibs -openmp -shared gnu
-        source cpptraj.sh
-        make -j2 libcpptraj
-    - name: Install pytraj
-      run: |        
-        git clone https://github.com/Amber-MD/pytraj.git
-        source cpptraj.sh
-        cd pytraj
-        python setup.py install
-        cd ..
-    - name: Test with pytest
-      run: |
-        source cpptraj.sh && cd pytraj/tests && pytest -vs --ignore=test_parallel_pmap
+      - name: Install prerequisite packages
+        run: |
+          sudo apt-get install -y gfortran libbz2-dev libblas-dev liblapack-dev libfftw3-dev clang cmake
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.10
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - name: Add conda to system path
+        run: echo $CONDA/bin >> $GITHUB_PATH
+      - name: Install conda packages
+        run: |
+          which conda
+          conda install conda=23.11.0 python=3.10
+          conda --version
+          conda env update --file devtools/ci/environment.yml --name base
+      - name: Install cpptraj
+        run: |
+          export PATH=$HOME/bin:${PATH}
+          export LD_LIBRARY_PATH=$HOME/lib:${LD_LIBRARY_PATH}
+          export MAKE_COMMAND="make -j2"
+          ./configure --buildlibs -openmp -shared gnu
+          source cpptraj.sh
+          make -j2 libcpptraj
+      - name: Install pytraj
+        run: |
+          git clone https://github.com/Amber-MD/pytraj.git
+          source cpptraj.sh
+          cd pytraj
+          python setup.py install
+          cd ..
+      - name: Test with pytest
+        run: |
+          source cpptraj.sh && cd pytraj/tests && pytest -vs --ignore=test_parallel_pmap
